@@ -167,6 +167,17 @@ campaigns = client.get_campaigns(org_id=org_id)
 # The client will use this org for subsequent requests
 ```
 
+### Working with ad groups
+
+```python
+# Get ad groups for a campaign
+campaign_id = "1234567890"
+adgroups = client.get_adgroups(campaign_id)
+
+for adgroup in adgroups:
+    print(f"Ad Group: {adgroup['name']} (Status: {adgroup['status']})")
+```
+
 ## API Reference
 
 ### Client initialization
@@ -199,8 +210,8 @@ AppleSearchAdsClient(
 
 #### Campaign Management
 
-- `get_campaign_groups()` - Get all campaign groups
 - `get_campaigns_with_details(fetch_all_orgs=True)` - Get campaigns with app details
+- `get_adgroups(campaign_id)` - Get ad groups for a specific campaign
 
 ## DataFrame Output
 
@@ -257,6 +268,7 @@ This project maintains **100% test coverage**. The test suite includes:
 - Exception handling tests
 - Edge case coverage
 - Legacy API format compatibility tests
+- Comprehensive integration tests
 
 ### Running Tests
 
@@ -269,9 +281,13 @@ pytest tests -n auto
 
 # Generate HTML coverage report
 pytest tests --cov=apple_search_ads --cov-report=html
+
+# Run integration tests (requires credentials)
+pytest tests/test_integration.py -v
 ```
 
-For detailed testing documentation, see [TESTING.md](TESTING.md).
+For detailed testing documentation, see [TESTING.md](TESTING.md).  
+For integration testing setup, see [docs/integration-testing.md](docs/integration-testing.md).
 
 ## Contributing
 

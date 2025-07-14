@@ -1,3 +1,16 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Private keys and certificates
+config/
+*.pem
+*.p8
+*.key
+*.crt
+*.cer
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

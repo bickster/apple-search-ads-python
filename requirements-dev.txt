@@ -14,3 +14,6 @@ sphinx-rtd-theme>=1.0.0
 # Type stubs
 types-requests>=2.31.0
 pandas-stubs>=2.0.0
+
+# Development tools
+python-dotenv>=1.0.0

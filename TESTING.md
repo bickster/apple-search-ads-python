@@ -460,6 +460,30 @@ The CI configuration is in `.github/workflows/tests.yml`.
 9. **Review test output** to ensure tests are meaningful
 10. **Maintain high coverage** but focus on quality over quantity
 
+## Integration Testing
+
+In addition to unit tests, the project includes integration tests that make real API calls. These tests:
+
+- Verify actual API behavior
+- Test authentication flow
+- Validate rate limiting
+- Ensure multi-organization support
+
+For detailed integration testing documentation, see [docs/integration-testing.md](docs/integration-testing.md).
+
+To run integration tests (requires credentials):
+
+```bash
+# Set up environment variables first
+export APPLE_SEARCH_ADS_TEST_CLIENT_ID=your_test_client_id
+export APPLE_SEARCH_ADS_TEST_TEAM_ID=your_test_team_id
+export APPLE_SEARCH_ADS_TEST_KEY_ID=your_test_key_id
+export APPLE_SEARCH_ADS_TEST_PRIVATE_KEY_PATH=/path/to/test/key.p8
+
+# Run integration tests
+pytest tests/test_integration.py -v
+```
+
 ## Troubleshooting
 
 ### Common Issues

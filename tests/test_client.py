@@ -321,38 +321,39 @@ class TestAppleSearchAdsClient:
         assert campaigns[0]["fetched_org_id"] == "123"
         assert campaigns[1]["name"] == "Campaign 2"
     
+    
     @patch.object(AppleSearchAdsClient, '_make_request')
-    def test_get_campaign_groups(self, mock_make_request, client):
-        """Test fetching campaign groups."""
+    def test_get_adgroups(self, mock_make_request, client):
+        """Test fetching ad groups for a campaign."""
         client.org_id = "123"
         mock_make_request.return_value = {
             "data": [
-                {"id": "1", "name": "Group 1", "campaignIds": ["1", "2"]},
-                {"id": "2", "name": "Group 2", "campaignIds": ["3"]}
+                {"id": "1", "name": "Ad Group 1", "status": "ENABLED"},
+                {"id": "2", "name": "Ad Group 2", "status": "PAUSED"}
             ]
         }
         
-        groups = client.get_campaign_groups()
+        adgroups = client.get_adgroups("campaign123")
         
-        assert len(groups) == 2
-        assert groups[0]["name"] == "Group 1"
-        assert len(groups[0]["campaignIds"]) == 2
+        assert len(adgroups) == 2
+        assert adgroups[0]["name"] == "Ad Group 1"
+        assert adgroups[1]["status"] == "PAUSED"
         mock_make_request.assert_called_once_with(
-            f"{client.BASE_URL}/campaign-groups",
+            f"{client.BASE_URL}/campaigns/campaign123/adgroups",
             params={"limit": 1000}
         )
     
     @patch.object(AppleSearchAdsClient, '_get_org_id')
     @patch.object(AppleSearchAdsClient, '_make_request')
-    def test_get_campaign_groups_no_org_id(self, mock_make_request, mock_get_org_id, client):
-        """Test fetching campaign groups when org_id is not set."""
+    def test_get_adgroups_no_org_id(self, mock_make_request, mock_get_org_id, client):
+        """Test fetching ad groups when org_id is not set."""
         client.org_id = None
         mock_make_request.return_value = {"data": []}
         
-        groups = client.get_campaign_groups()
+        adgroups = client.get_adgroups("campaign123")
         
         mock_get_org_id.assert_called_once()
-        assert groups == []
+        assert adgroups == []
     
     @patch.object(AppleSearchAdsClient, 'get_all_organizations')
     @patch.object(AppleSearchAdsClient, 'get_campaigns')
@@ -456,7 +457,7 @@ class TestAppleSearchAdsClient:
         assert len(result) == 2  # Two unique dates
         assert result.iloc[0]['spend'] == 150.0  # 100 + 50
         assert result.iloc[1]['spend'] == 75.0
-        assert 'clicks' in result.columns  # taps renamed to clicks
+        assert 'taps' in result.columns
     
     @patch.object(AppleSearchAdsClient, 'get_all_organizations')
     @patch.object(AppleSearchAdsClient, 'get_campaigns_with_details')
@@ -491,7 +492,7 @@ class TestAppleSearchAdsClient:
         assert len(result) == 3  # 3 date-app combinations
         assert '123456' in result['app_id'].values
         assert '789012' in result['app_id'].values
-        assert 'clicks' in result.columns  # taps renamed to clicks
+        assert 'taps' in result.columns
         assert 'campaigns' in result.columns  # campaign count
     
     @patch.object(AppleSearchAdsClient, 'get_all_campaigns')

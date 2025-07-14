@@ -196,18 +196,22 @@ class AppleSearchAdsClient:
         
         return []
     
-    def get_campaign_groups(self) -> List[Dict]:
+    
+    def get_adgroups(self, campaign_id: str) -> List[Dict]:
         """
-        Get all campaign groups.
+        Get all ad groups for a specific campaign.
         
+        Args:
+            campaign_id: The campaign ID to get ad groups for
+            
         Returns:
-            List of campaign group dictionaries.
+            List of ad group dictionaries
         """
         # Ensure we have org_id for the context header
         if not self.org_id:
             self._get_org_id()
             
-        url = f"{self.BASE_URL}/campaign-groups"
+        url = f"{self.BASE_URL}/campaigns/{campaign_id}/adgroups"
         
         params = {
             "limit": 1000
@@ -487,8 +491,6 @@ class AppleSearchAdsClient:
             axis=1
         )
         
-        # Rename taps to clicks for consistency
-        daily_df.rename(columns={'taps': 'clicks'}, inplace=True)
         
         return daily_df
     
@@ -531,7 +533,7 @@ class AppleSearchAdsClient:
             - app_id: Apple App Store ID (adamId)
             - spend: Total spend in USD
             - impressions: Total impressions
-            - clicks: Total clicks (taps)
+            - taps: Total taps on ads
             - installs: Total conversions/installs
             - campaigns: Number of active campaigns
         """
@@ -601,7 +603,6 @@ class AppleSearchAdsClient:
         
         # Rename columns to match standard format
         aggregated.rename(columns={
-            'taps': 'clicks',
             'campaign_id': 'campaigns'
         }, inplace=True)
         
@@ -612,12 +613,12 @@ class AppleSearchAdsClient:
         ).round(2)
         
         aggregated['ctr'] = aggregated.apply(
-            lambda x: (x['clicks'] / x['impressions'] * 100) if x['impressions'] > 0 else 0,
+            lambda x: (x['taps'] / x['impressions'] * 100) if x['impressions'] > 0 else 0,
             axis=1
         ).round(2)
         
         aggregated['cvr'] = aggregated.apply(
-            lambda x: (x['installs'] / x['clicks'] * 100) if x['clicks'] > 0 else 0,
+            lambda x: (x['installs'] / x['taps'] * 100) if x['taps'] > 0 else 0,
             axis=1
         ).round(2)
         
