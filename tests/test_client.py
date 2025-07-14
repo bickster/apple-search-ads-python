@@ -107,6 +107,24 @@ class TestAppleSearchAdsClient:
 
             assert "Private key file not found" in str(exc_info.value)
 
+    def test_load_private_key_no_path_provided(self):
+        """Test _load_private_key when private_key_path is None."""
+        client = AppleSearchAdsClient(
+            client_id="test",
+            team_id="test", 
+            key_id="test",
+            private_key_content="test_key_content"
+        )
+        
+        # Manually set both to None to trigger the missing line
+        client.private_key_content = None
+        client.private_key_path = None
+        
+        with pytest.raises(ValueError) as exc_info:
+            client._load_private_key()
+            
+        assert "No private key path provided" in str(exc_info.value)
+
     @patch("jwt.encode")
     def test_generate_client_secret(self, mock_jwt_encode, client):
         """Test JWT client secret generation."""
