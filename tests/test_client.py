@@ -165,6 +165,20 @@ class TestAppleSearchAdsClient:
             },
         )
 
+    @patch("requests.post")
+    def test_get_access_token_none_returned(self, mock_post, client):
+        """Test access token retrieval when None is returned."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"access_token": None}
+        mock_response.raise_for_status = Mock()
+        mock_post.return_value = mock_response
+
+        with patch.object(client, "_generate_client_secret", return_value="test_secret"):
+            with pytest.raises(ValueError) as exc_info:
+                client._get_access_token()
+                
+        assert "Failed to obtain access token" in str(exc_info.value)
+
     def test_get_access_token_cached(self, client):
         """Test that cached token is returned when still valid."""
         # Set up a cached token

@@ -130,7 +130,9 @@ class AppleSearchAdsClient:
         # Token expires in 1 hour, refresh 5 minutes before
         self._token_expiry = time.time() + 3300
 
-        return self._token  # type: ignore
+        if self._token is None:
+            raise ValueError("Failed to obtain access token")
+        return self._token
 
     def _get_headers(self, include_org_context: bool = True) -> Dict[str, str]:
         """Get headers for API requests."""
