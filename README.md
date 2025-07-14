@@ -286,8 +286,7 @@ pytest tests --cov=apple_search_ads --cov-report=html
 pytest tests/test_integration.py -v
 ```
 
-For detailed testing documentation, see [TESTING.md](TESTING.md).  
-For integration testing setup, see [docs/integration-testing.md](docs/integration-testing.md).
+For detailed testing documentation, see [TESTING.md](TESTING.md).
 
 ## Contributing
 
