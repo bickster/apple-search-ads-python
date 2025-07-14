@@ -12,6 +12,7 @@ A Python client library for Apple Search Ads API v5, providing a simple and intu
 - 🐼 Pandas DataFrames for easy data manipulation
 - 🔄 Automatic token refresh
 - 🎯 Type hints for better IDE support
+- ✅ 100% test coverage
 
 ## Installation
 
@@ -247,6 +248,30 @@ except Exception as e:
 
 - Python 3.8 or higher
 - See `requirements.txt` for package dependencies
+
+## Testing
+
+This project maintains **100% test coverage**. The test suite includes:
+
+- Unit tests with mocked API responses
+- Exception handling tests
+- Edge case coverage
+- Legacy API format compatibility tests
+
+### Running Tests
+
+```bash
+# Run all tests with coverage report
+pytest tests -v --cov=apple_search_ads --cov-report=term-missing
+
+# Run tests in parallel for faster execution
+pytest tests -n auto
+
+# Generate HTML coverage report
+pytest tests --cov=apple_search_ads --cov-report=html
+```
+
+For detailed testing documentation, see [TESTING.md](TESTING.md).
 
 ## Contributing
 
