@@ -9,7 +9,7 @@ import time
 import os
 import requests
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 import pandas as pd
 from ratelimit import limits, sleep_and_retry
 
@@ -72,13 +72,16 @@ class AppleSearchAdsClient:
             )
 
         self.org_id = org_id
-        self._token = None
-        self._token_expiry = None
+        self._token: Optional[str] = None
+        self._token_expiry: Optional[float] = None
 
     def _load_private_key(self) -> str:
         """Load private key from file or content."""
         if self.private_key_content:
             return self.private_key_content
+
+        if not self.private_key_path:
+            raise ValueError("No private key path provided")
 
         if not os.path.exists(self.private_key_path):
             raise FileNotFoundError(f"Private key file not found: {self.private_key_path}")
@@ -127,7 +130,7 @@ class AppleSearchAdsClient:
         # Token expires in 1 hour, refresh 5 minutes before
         self._token_expiry = time.time() + 3300
 
-        return self._token
+        return self._token  # type: ignore
 
     def _get_headers(self, include_org_context: bool = True) -> Dict[str, str]:
         """Get headers for API requests."""
@@ -164,7 +167,7 @@ class AppleSearchAdsClient:
         json_data: Optional[Dict] = None,
         params: Optional[Dict] = None,
         include_org_context: bool = True,
-    ) -> Dict:
+    ) -> Dict[str, Any]:
         """Make a rate-limited request to the API."""
         response = requests.request(
             method=method,
@@ -176,7 +179,7 @@ class AppleSearchAdsClient:
         response.raise_for_status()
         return response.json()
 
-    def get_all_organizations(self) -> List[Dict]:
+    def get_all_organizations(self) -> List[Dict[str, Any]]:
         """
         Get all organizations the user has access to.
 
@@ -190,7 +193,7 @@ class AppleSearchAdsClient:
 
         return []
 
-    def get_adgroups(self, campaign_id: str) -> List[Dict]:
+    def get_adgroups(self, campaign_id: str) -> List[Dict[str, Any]]:
         """
         Get all ad groups for a specific campaign.
 
@@ -211,7 +214,7 @@ class AppleSearchAdsClient:
         response = self._make_request(url, params=params)
         return response.get("data", [])
 
-    def get_campaigns(self, org_id: Optional[str] = None) -> List[Dict]:
+    def get_campaigns(self, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get all campaigns for a specific organization or the default one.
 
@@ -247,7 +250,7 @@ class AppleSearchAdsClient:
             if original_org_id is not None:
                 self.org_id = original_org_id
 
-    def get_all_campaigns(self) -> List[Dict]:
+    def get_all_campaigns(self) -> List[Dict[str, Any]]:
         """
         Get campaigns from all organizations.
 
@@ -481,7 +484,7 @@ class AppleSearchAdsClient:
 
         return daily_df
 
-    def get_campaigns_with_details(self, fetch_all_orgs: bool = True) -> List[Dict]:
+    def get_campaigns_with_details(self, fetch_all_orgs: bool = True) -> List[Dict[str, Any]]:
         """
         Get all campaigns with their app details including adamId.
 
