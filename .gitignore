@@ -152,3 +152,7 @@ dmypy.json
 
 # Test credentials
 test_credentials.json
+
+# PyPI configuration
+.pypirc
+.pypirc.template

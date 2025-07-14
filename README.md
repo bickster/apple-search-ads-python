@@ -17,7 +17,7 @@ A Python client library for Apple Search Ads API v5, providing a simple and intu
 ## Installation
 
 ```bash
-pip install apple-search-ads
+pip install apple-search-ads-client
 ```
 
 ## Quick Start
