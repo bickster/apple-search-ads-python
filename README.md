@@ -264,7 +264,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- 📧 Email: your.email@example.com
 - 🐛 Issues: [GitHub Issues](https://github.com/bickster/apple-search-ads-python/issues)
 - 📖 Documentation: [Read the Docs](https://apple-search-ads-python.readthedocs.io/)
 
