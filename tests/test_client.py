@@ -53,12 +53,14 @@ class TestAppleSearchAdsClient:
         assert client.key_id == "env_key_id"
         assert client.private_key_path == "/path/to/key.p8"
     
+    @patch.dict('os.environ', {}, clear=True)
     def test_client_initialization_missing_credentials(self):
         """Test client initialization with missing credentials."""
         with pytest.raises(ValueError) as exc_info:
             AppleSearchAdsClient(client_id="test")
         assert "Missing required credentials" in str(exc_info.value)
     
+    @patch.dict('os.environ', {}, clear=True)
     def test_client_initialization_missing_private_key(self):
         """Test client initialization with missing private key."""
         with pytest.raises(ValueError) as exc_info:
