@@ -1,0 +1,16 @@
+# Include base requirements
+-r requirements.txt
+
+# Development dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+pytest-mock>=3.10.0
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.0.0
+sphinx>=6.0.0
+sphinx-rtd-theme>=1.0.0
+
+# Type stubs
+types-requests>=2.31.0
+pandas-stubs>=2.0.0
