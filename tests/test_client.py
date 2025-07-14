@@ -110,19 +110,16 @@ class TestAppleSearchAdsClient:
     def test_load_private_key_no_path_provided(self):
         """Test _load_private_key when private_key_path is None."""
         client = AppleSearchAdsClient(
-            client_id="test",
-            team_id="test", 
-            key_id="test",
-            private_key_content="test_key_content"
+            client_id="test", team_id="test", key_id="test", private_key_content="test_key_content"
         )
-        
+
         # Manually set both to None to trigger the missing line
         client.private_key_content = None
         client.private_key_path = None
-        
+
         with pytest.raises(ValueError) as exc_info:
             client._load_private_key()
-            
+
         assert "No private key path provided" in str(exc_info.value)
 
     @patch("jwt.encode")
@@ -176,7 +173,7 @@ class TestAppleSearchAdsClient:
         with patch.object(client, "_generate_client_secret", return_value="test_secret"):
             with pytest.raises(ValueError) as exc_info:
                 client._get_access_token()
-                
+
         assert "Failed to obtain access token" in str(exc_info.value)
 
     def test_get_access_token_cached(self, client):
