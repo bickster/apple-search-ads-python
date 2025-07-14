@@ -25,7 +25,7 @@ def sample_org_data():
                 "orgName": "Test Organization",
                 "currency": "USD",
                 "paymentModel": "PAYG",
-                "roleNames": ["API Account Manager"]
+                "roleNames": ["API Account Manager"],
             }
         ]
     }
@@ -42,7 +42,7 @@ def sample_campaign_data():
                 "adamId": "123456789",
                 "status": "ENABLED",
                 "budgetAmount": {"amount": "1000.00", "currency": "USD"},
-                "dailyBudgetAmount": {"amount": "50.00", "currency": "USD"}
+                "dailyBudgetAmount": {"amount": "50.00", "currency": "USD"},
             },
             {
                 "id": "1002",
@@ -50,8 +50,8 @@ def sample_campaign_data():
                 "adamId": "987654321",
                 "status": "PAUSED",
                 "budgetAmount": {"amount": "500.00", "currency": "USD"},
-                "dailyBudgetAmount": {"amount": "25.00", "currency": "USD"}
-            }
+                "dailyBudgetAmount": {"amount": "25.00", "currency": "USD"},
+            },
         ]
     }
 
@@ -68,7 +68,7 @@ def sample_report_data():
                             "campaignId": "1001",
                             "campaignName": "App Campaign 1",
                             "campaignStatus": "ENABLED",
-                            "app": {"appName": "Test App", "adamId": "123456789"}
+                            "app": {"appName": "Test App", "adamId": "123456789"},
                         },
                         "granularity": [
                             {
@@ -80,7 +80,7 @@ def sample_report_data():
                                 "totalAvgCPI": {"amount": "2.00", "currency": "USD"},
                                 "avgCPT": {"amount": "0.20", "currency": "USD"},
                                 "ttr": 0.05,
-                                "totalInstallRate": 0.1
+                                "totalInstallRate": 0.1,
                             },
                             {
                                 "date": "2024-01-02",
@@ -91,9 +91,9 @@ def sample_report_data():
                                 "totalAvgCPI": {"amount": "2.00", "currency": "USD"},
                                 "avgCPT": {"amount": "0.20", "currency": "USD"},
                                 "ttr": 0.05,
-                                "totalInstallRate": 0.1
-                            }
-                        ]
+                                "totalInstallRate": 0.1,
+                            },
+                        ],
                     }
                 ]
             }
