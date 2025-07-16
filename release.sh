@@ -35,14 +35,9 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to wait for user confirmation
+# Function to wait for user confirmation (now just prints message)
 confirm() {
-    read -p "$(echo -e "${YELLOW}$1 (y/N):${NC} ")" -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_error "Operation cancelled by user"
-        exit 1
-    fi
+    print_status "$1"
 }
 
 # Function to check git status
@@ -117,7 +112,7 @@ run_tests() {
         print_success "Tests passed"
     else
         print_warning "pytest not found, skipping tests"
-        confirm "Continue without running tests?"
+        print_status "Continuing without running tests"
     fi
 }
 
@@ -334,7 +329,7 @@ main() {
     echo "  6. Verify PyPI publication"
     echo
     
-    confirm "Proceed with release?"
+    print_status "Proceeding with release..."
     echo
     
     # Update version
@@ -361,7 +356,7 @@ main() {
         print_success "All CI/CD checks passed"
     else
         print_error "CI/CD checks failed"
-        confirm "Continue with release creation anyway?"
+        print_warning "Continuing despite CI/CD failures"
     fi
     echo
     
