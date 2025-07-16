@@ -330,9 +330,8 @@ main() {
     echo "  2. Run tests and code quality checks"
     echo "  3. Create commit and tag"
     echo "  4. Push to GitHub"
-    echo "  5. Wait for GitHub Actions (tests + PyPI publish)"
-    echo "  6. Create GitHub release"
-    echo "  7. Verify PyPI publication"
+    echo "  5. Wait for GitHub Actions (tests + PyPI publish + GitHub release)"
+    echo "  6. Verify PyPI publication"
     echo
     
     confirm "Proceed with release?"
@@ -366,9 +365,9 @@ main() {
     fi
     echo
     
-    # Create GitHub release
+    # GitHub release will be created automatically by workflow
     print_status "=== GITHUB RELEASE PHASE ==="
-    create_github_release "$version"
+    print_success "GitHub release will be created automatically by the workflow"
     echo
     
     # Verify PyPI
@@ -383,6 +382,7 @@ main() {
     echo "📦 PyPI: https://pypi.org/project/apple-search-ads-client/$version/"
     echo "🎉 GitHub: https://github.com/bickster/apple-search-ads-python/releases/tag/v$version"
     echo "📋 Actions: https://github.com/bickster/apple-search-ads-python/actions"
+    echo "⏳ Note: GitHub release creation is automatic and may take a few minutes to appear"
     echo
     print_status "Installation command: pip install apple-search-ads-client==$version"
 }

@@ -48,12 +48,9 @@ The release script (`release.sh`) automates the entire release process with veri
 - ✅ Waits for GitHub Actions to complete
 - ✅ Verifies all tests pass
 - ✅ Confirms PyPI publication succeeds
+- ✅ Automatically creates GitHub release with distribution files
 
-### 7. GitHub Release Phase
-- ✅ Creates GitHub release with auto-generated notes
-- ✅ Marks as latest release
-
-### 8. PyPI Verification Phase
+### 7. PyPI Verification Phase
 - ✅ Verifies package is available on PyPI
 - ✅ Provides installation instructions
 

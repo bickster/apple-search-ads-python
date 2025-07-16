@@ -87,3 +87,38 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
       run: |
         twine upload dist/*
+    
+    - name: Extract version from tag
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+    
+    - name: Create GitHub Release
+      uses: ncipollo/create-release@v1
+      with:
+        tag: ${{ github.ref_name }}
+        name: Release v${{ env.VERSION }}
+        body: |
+          ## Release v${{ env.VERSION }}
+          
+          ### Changes
+          See the [commit history](https://github.com/${{ github.repository }}/compare/v${{ env.VERSION }}...v${{ env.VERSION }}) for detailed changes.
+          
+          ### Installation
+          ```bash
+          pip install apple-search-ads-client==${{ env.VERSION }}
+          ```
+          
+          ### PyPI Package
+          - 📦 [PyPI Package](https://pypi.org/project/apple-search-ads-client/${{ env.VERSION }}/)
+          - 📋 [Release Guide](https://github.com/${{ github.repository }}/blob/main/RELEASE_GUIDE.md)
+          - 📖 [Documentation](https://github.com/${{ github.repository }}/blob/main/README.md)
+          
+          ### Distribution Files
+          - `apple_search_ads_client-${{ env.VERSION }}-py3-none-any.whl` - Wheel distribution
+          - `apple_search_ads_client-${{ env.VERSION }}.tar.gz` - Source distribution
+          
+          ---
+          🤖 Automated release created by GitHub Actions
+        artifacts: "dist/*"
+        draft: false
+        prerelease: false
+        token: ${{ secrets.GITHUB_TOKEN }}
