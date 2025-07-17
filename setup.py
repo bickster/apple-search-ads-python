@@ -53,7 +53,7 @@ setup(
     project_urls={
         "Bug Reports": "https://github.com/bickster/apple-search-ads-python/issues",
         "Source": "https://github.com/bickster/apple-search-ads-python",
-        "Documentation": "https://apple-search-ads-python.readthedocs.io/",
+        "Documentation": "https://github.com/bickster/apple-search-ads-python/blob/main/README.md",
     },
     keywords="apple search ads api marketing advertising ios app store",
 )

@@ -51,7 +51,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/bickster/apple-search-ads-python"
-Documentation = "https://apple-search-ads-python.readthedocs.io/"
+Documentation = "https://github.com/bickster/apple-search-ads-python/blob/main/README.md"
 Repository = "https://github.com/bickster/apple-search-ads-python"
 Issues = "https://github.com/bickster/apple-search-ads-python/issues"
 
