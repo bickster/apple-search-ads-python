@@ -70,6 +70,26 @@ flake8 src tests --max-line-length=127
 - Always reinstall with `pip install -e .` after editing source files, or tests will run against the old installed version
 - Run `black` before committing to avoid formatting-only commits
 
+### Creating a Release
+
+**Always use the release script - do not create releases manually.**
+
+```bash
+./release.sh <version>
+# Example: ./release.sh 2.2.0
+```
+
+The script handles everything automatically:
+1. Validates version format and checks it doesn't already exist
+2. Updates version in `pyproject.toml`
+3. Runs tests and code quality checks
+4. Creates commit and tag
+5. Pushes to GitHub
+6. Waits for GitHub Actions (which publishes to PyPI and creates the GitHub release)
+7. Verifies PyPI publication
+
+**Do NOT manually run `gh release create`** - the GitHub Actions workflow creates the release automatically when a tag is pushed.
+
 ## Architecture Overview
 
 ### Core Components
