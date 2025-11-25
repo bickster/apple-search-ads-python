@@ -181,6 +181,65 @@ class AppleSearchAdsClient:
         response.raise_for_status()
         return response.json()
 
+    def _parse_date_param(self, date: Union[datetime, str]) -> datetime:
+        """Convert string date to datetime if needed."""
+        if isinstance(date, str):
+            return datetime.strptime(date, "%Y-%m-%d")
+        return date
+
+    def _build_report_request(
+        self, start_date: datetime, end_date: datetime, granularity: str
+    ) -> Dict[str, Any]:
+        """Build standard report request data."""
+        return {
+            "startTime": start_date.strftime("%Y-%m-%d"),
+            "endTime": end_date.strftime("%Y-%m-%d"),
+            "granularity": granularity,
+            "selector": {
+                "orderBy": [{"field": "localSpend", "sortOrder": "DESCENDING"}],
+                "pagination": {"limit": 1000},
+            },
+            "returnRowTotals": True,
+            "returnRecordsWithNoMetrics": False,
+        }
+
+    def _extract_rows_from_response(self, response: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract rows from different API response formats."""
+        if not response or "data" not in response:
+            return []
+        data = response["data"]
+        if "reportingDataResponse" in data and "row" in data["reportingDataResponse"]:
+            return data["reportingDataResponse"]["row"]
+        if "rows" in data:
+            return data["rows"]
+        return []
+
+    def _parse_metrics(self, day_data: Dict[str, Any], is_legacy: bool = False) -> Dict[str, Any]:
+        """Parse common metrics from row data."""
+        if is_legacy:
+            return {
+                "impressions": day_data.get("impressions", 0),
+                "taps": day_data.get("taps", 0),
+                "installs": day_data.get("installs", 0),
+                "spend": float(day_data.get("localSpend", {}).get("amount", 0)),
+                "currency": day_data.get("localSpend", {}).get("currency", "USD"),
+                "avg_cpa": float(day_data.get("avgCPA", {}).get("amount", 0)),
+                "avg_cpt": float(day_data.get("avgCPT", {}).get("amount", 0)),
+                "ttr": day_data.get("ttr", 0),
+                "conversion_rate": day_data.get("conversionRate", 0),
+            }
+        return {
+            "impressions": day_data.get("impressions", 0),
+            "taps": day_data.get("taps", 0),
+            "installs": day_data.get("totalInstalls", 0),
+            "spend": float(day_data.get("localSpend", {}).get("amount", 0)),
+            "currency": day_data.get("localSpend", {}).get("currency", "USD"),
+            "avg_cpa": float(day_data.get("totalAvgCPI", {}).get("amount", 0)),
+            "avg_cpt": float(day_data.get("avgCPT", {}).get("amount", 0)),
+            "ttr": day_data.get("ttr", 0),
+            "conversion_rate": day_data.get("totalInstallRate", 0),
+        }
+
     def get_all_organizations(self) -> List[Dict[str, Any]]:
         """
         Get all organizations the user has access to.
@@ -280,6 +339,23 @@ class AppleSearchAdsClient:
 
         return all_campaigns
 
+    def _parse_campaign_row(
+        self, row: Dict[str, Any], metadata: Dict[str, Any], is_legacy: bool
+    ) -> Dict[str, Any]:
+        """Parse a single campaign row into a flat dict."""
+        app_name = metadata.get("appName")
+        if not is_legacy and "app" in metadata:
+            app_name = metadata.get("app", {}).get("appName")
+        base = {
+            "campaign_id": metadata.get("campaignId"),
+            "campaign_name": metadata.get("campaignName"),
+            "campaign_status": metadata.get("campaignStatus"),
+            "app_name": app_name,
+            "adam_id": metadata.get("adamId"),
+        }
+        base.update(self._parse_metrics(row, is_legacy))
+        return base
+
     def get_campaign_report(
         self,
         start_date: Union[datetime, str],
@@ -297,106 +373,48 @@ class AppleSearchAdsClient:
         Returns:
             DataFrame with campaign performance metrics.
         """
-        # Ensure we have org_id for the context header
         if not self.org_id:
             self._get_org_id()
 
-        # Convert string dates to datetime if needed
-        if isinstance(start_date, str):
-            start_date = datetime.strptime(start_date, "%Y-%m-%d")
-        if isinstance(end_date, str):
-            end_date = datetime.strptime(end_date, "%Y-%m-%d")
+        start_date = self._parse_date_param(start_date)
+        end_date = self._parse_date_param(end_date)
 
         url = f"{self.BASE_URL}/reports/campaigns"
-
-        # Apple Search Ads API uses date-only format
-        request_data = {
-            "startTime": start_date.strftime("%Y-%m-%d"),
-            "endTime": end_date.strftime("%Y-%m-%d"),
-            "granularity": granularity,
-            "selector": {
-                "orderBy": [{"field": "localSpend", "sortOrder": "DESCENDING"}],
-                "pagination": {"limit": 1000},
-            },
-            "returnRowTotals": True,
-            "returnRecordsWithNoMetrics": False,
-        }
-
+        request_data = self._build_report_request(start_date, end_date, granularity)
         response = self._make_request(url, method="POST", json_data=request_data)
+        rows = self._extract_rows_from_response(response)
 
-        # Handle different response structures
-        rows = []
-        if response and "data" in response:
-            if (
-                "reportingDataResponse" in response["data"]
-                and "row" in response["data"]["reportingDataResponse"]
-            ):
-                # New response structure
-                rows = response["data"]["reportingDataResponse"]["row"]
-            elif "rows" in response["data"]:
-                # Old response structure
-                rows = response["data"]["rows"]
+        if not rows:
+            return pd.DataFrame()
 
-        if rows:
-            # Extract data into a flat structure
-            data = []
-            for row in rows:
-                metadata = row.get("metadata", {})
+        data = []
+        for row in rows:
+            metadata = row.get("metadata", {})
+            if "granularity" in row:
+                for day_data in row["granularity"]:
+                    entry = {"date": day_data.get("date")}
+                    entry.update(self._parse_campaign_row(day_data, metadata, is_legacy=False))
+                    data.append(entry)
+            else:
+                metrics = row.get("metrics", {})
+                entry = {"date": metadata.get("date")}
+                entry.update(self._parse_campaign_row(metrics, metadata, is_legacy=True))
+                data.append(entry)
 
-                # For the new structure, we need to process granularity data
-                if "granularity" in row:
-                    # New structure: iterate through each day in granularity
-                    for day_data in row["granularity"]:
-                        data.append(
-                            {
-                                "date": day_data.get("date"),
-                                "campaign_id": metadata.get("campaignId"),
-                                "campaign_name": metadata.get("campaignName"),
-                                "campaign_status": metadata.get("campaignStatus"),
-                                "app_name": (
-                                    metadata.get("app", {}).get("appName")
-                                    if "app" in metadata
-                                    else metadata.get("appName")
-                                ),
-                                "adam_id": metadata.get("adamId"),
-                                "impressions": day_data.get("impressions", 0),
-                                "taps": day_data.get("taps", 0),
-                                "installs": day_data.get("totalInstalls", 0),
-                                "spend": float(day_data.get("localSpend", {}).get("amount", 0)),
-                                "currency": day_data.get("localSpend", {}).get("currency", "USD"),
-                                "avg_cpa": float(day_data.get("totalAvgCPI", {}).get("amount", 0)),
-                                "avg_cpt": float(day_data.get("avgCPT", {}).get("amount", 0)),
-                                "ttr": day_data.get("ttr", 0),
-                                "conversion_rate": day_data.get("totalInstallRate", 0),
-                            }
-                        )
-                else:
-                    # Old structure
-                    metrics = row.get("metrics", {})
+        return pd.DataFrame(data)
 
-                    data.append(
-                        {
-                            "date": metadata.get("date"),
-                            "campaign_id": metadata.get("campaignId"),
-                            "campaign_name": metadata.get("campaignName"),
-                            "campaign_status": metadata.get("campaignStatus"),
-                            "app_name": metadata.get("appName"),
-                            "adam_id": metadata.get("adamId"),
-                            "impressions": metrics.get("impressions", 0),
-                            "taps": metrics.get("taps", 0),
-                            "installs": metrics.get("installs", 0),
-                            "spend": float(metrics.get("localSpend", {}).get("amount", 0)),
-                            "currency": metrics.get("localSpend", {}).get("currency", "USD"),
-                            "avg_cpa": float(metrics.get("avgCPA", {}).get("amount", 0)),
-                            "avg_cpt": float(metrics.get("avgCPT", {}).get("amount", 0)),
-                            "ttr": metrics.get("ttr", 0),
-                            "conversion_rate": metrics.get("conversionRate", 0),
-                        }
-                    )
-
-            return pd.DataFrame(data)
-
-        return pd.DataFrame()
+    def _parse_adgroup_row(
+        self, row: Dict[str, Any], metadata: Dict[str, Any], campaign_id: str, is_legacy: bool
+    ) -> Dict[str, Any]:
+        """Parse a single ad group row into a flat dict."""
+        base = {
+            "campaign_id": campaign_id,
+            "adgroup_id": metadata.get("adGroupId"),
+            "adgroup_name": metadata.get("adGroupName"),
+            "adgroup_status": metadata.get("adGroupStatus"),
+        }
+        base.update(self._parse_metrics(row, is_legacy))
+        return base
 
     def get_adgroup_report(
         self,
@@ -417,91 +435,52 @@ class AppleSearchAdsClient:
         Returns:
             DataFrame with ad group performance metrics.
         """
-        # Ensure we have org_id for the context header
         if not self.org_id:
             self._get_org_id()
 
-        # Convert string dates to datetime if needed
-        if isinstance(start_date, str):
-            start_date = datetime.strptime(start_date, "%Y-%m-%d")
-        if isinstance(end_date, str):
-            end_date = datetime.strptime(end_date, "%Y-%m-%d")
+        start_date = self._parse_date_param(start_date)
+        end_date = self._parse_date_param(end_date)
 
         url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/adgroups"
-
-        request_data = {
-            "startTime": start_date.strftime("%Y-%m-%d"),
-            "endTime": end_date.strftime("%Y-%m-%d"),
-            "granularity": granularity,
-            "selector": {
-                "orderBy": [{"field": "localSpend", "sortOrder": "DESCENDING"}],
-                "pagination": {"limit": 1000},
-            },
-            "returnRowTotals": True,
-            "returnRecordsWithNoMetrics": False,
-        }
-
+        request_data = self._build_report_request(start_date, end_date, granularity)
         response = self._make_request(url, method="POST", json_data=request_data)
+        rows = self._extract_rows_from_response(response)
 
-        rows = []
-        if response and "data" in response:
-            if (
-                "reportingDataResponse" in response["data"]
-                and "row" in response["data"]["reportingDataResponse"]
-            ):
-                rows = response["data"]["reportingDataResponse"]["row"]
-            elif "rows" in response["data"]:
-                rows = response["data"]["rows"]
+        if not rows:
+            return pd.DataFrame()
 
-        if rows:
-            data = []
-            for row in rows:
-                metadata = row.get("metadata", {})
+        data = []
+        for row in rows:
+            metadata = row.get("metadata", {})
+            if "granularity" in row:
+                for day_data in row["granularity"]:
+                    entry = {"date": day_data.get("date")}
+                    entry.update(self._parse_adgroup_row(day_data, metadata, campaign_id, False))
+                    data.append(entry)
+            else:
+                metrics = row.get("metrics", {})
+                entry = {"date": metadata.get("date")}
+                entry.update(self._parse_adgroup_row(metrics, metadata, campaign_id, True))
+                data.append(entry)
 
-                if "granularity" in row:
-                    for day_data in row["granularity"]:
-                        data.append(
-                            {
-                                "date": day_data.get("date"),
-                                "campaign_id": campaign_id,
-                                "adgroup_id": metadata.get("adGroupId"),
-                                "adgroup_name": metadata.get("adGroupName"),
-                                "adgroup_status": metadata.get("adGroupStatus"),
-                                "impressions": day_data.get("impressions", 0),
-                                "taps": day_data.get("taps", 0),
-                                "installs": day_data.get("totalInstalls", 0),
-                                "spend": float(day_data.get("localSpend", {}).get("amount", 0)),
-                                "currency": day_data.get("localSpend", {}).get("currency", "USD"),
-                                "avg_cpa": float(day_data.get("totalAvgCPI", {}).get("amount", 0)),
-                                "avg_cpt": float(day_data.get("avgCPT", {}).get("amount", 0)),
-                                "ttr": day_data.get("ttr", 0),
-                                "conversion_rate": day_data.get("totalInstallRate", 0),
-                            }
-                        )
-                else:
-                    metrics = row.get("metrics", {})
-                    data.append(
-                        {
-                            "date": metadata.get("date"),
-                            "campaign_id": campaign_id,
-                            "adgroup_id": metadata.get("adGroupId"),
-                            "adgroup_name": metadata.get("adGroupName"),
-                            "adgroup_status": metadata.get("adGroupStatus"),
-                            "impressions": metrics.get("impressions", 0),
-                            "taps": metrics.get("taps", 0),
-                            "installs": metrics.get("installs", 0),
-                            "spend": float(metrics.get("localSpend", {}).get("amount", 0)),
-                            "currency": metrics.get("localSpend", {}).get("currency", "USD"),
-                            "avg_cpa": float(metrics.get("avgCPA", {}).get("amount", 0)),
-                            "avg_cpt": float(metrics.get("avgCPT", {}).get("amount", 0)),
-                            "ttr": metrics.get("ttr", 0),
-                            "conversion_rate": metrics.get("conversionRate", 0),
-                        }
-                    )
+        return pd.DataFrame(data)
 
-            return pd.DataFrame(data)
-
-        return pd.DataFrame()
+    def _parse_keyword_row(
+        self, row: Dict[str, Any], metadata: Dict[str, Any], campaign_id: str, is_legacy: bool
+    ) -> Dict[str, Any]:
+        """Parse a single keyword row into a flat dict."""
+        bid_amount = metadata.get("bidAmount", {})
+        base = {
+            "campaign_id": campaign_id,
+            "adgroup_id": metadata.get("adGroupId"),
+            "keyword_id": metadata.get("keywordId"),
+            "keyword": metadata.get("keyword"),
+            "keyword_status": metadata.get("keywordStatus"),
+            "match_type": metadata.get("matchType"),
+            "bid_amount": float(bid_amount.get("amount", 0)) if bid_amount else 0,
+        }
+        base.update(self._parse_metrics(row, is_legacy))
+        return base
 
     def get_keyword_report(
         self,
@@ -522,101 +501,35 @@ class AppleSearchAdsClient:
         Returns:
             DataFrame with keyword performance metrics.
         """
-        # Ensure we have org_id for the context header
         if not self.org_id:
             self._get_org_id()
 
-        # Convert string dates to datetime if needed
-        if isinstance(start_date, str):
-            start_date = datetime.strptime(start_date, "%Y-%m-%d")
-        if isinstance(end_date, str):
-            end_date = datetime.strptime(end_date, "%Y-%m-%d")
+        start_date = self._parse_date_param(start_date)
+        end_date = self._parse_date_param(end_date)
 
         url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/keywords"
-
-        request_data = {
-            "startTime": start_date.strftime("%Y-%m-%d"),
-            "endTime": end_date.strftime("%Y-%m-%d"),
-            "granularity": granularity,
-            "selector": {
-                "orderBy": [{"field": "localSpend", "sortOrder": "DESCENDING"}],
-                "pagination": {"limit": 1000},
-            },
-            "returnRowTotals": True,
-            "returnRecordsWithNoMetrics": False,
-        }
-
+        request_data = self._build_report_request(start_date, end_date, granularity)
         response = self._make_request(url, method="POST", json_data=request_data)
+        rows = self._extract_rows_from_response(response)
 
-        rows = []
-        if response and "data" in response:
-            if (
-                "reportingDataResponse" in response["data"]
-                and "row" in response["data"]["reportingDataResponse"]
-            ):
-                rows = response["data"]["reportingDataResponse"]["row"]
-            elif "rows" in response["data"]:
-                rows = response["data"]["rows"]
+        if not rows:
+            return pd.DataFrame()
 
-        if rows:
-            data = []
-            for row in rows:
-                metadata = row.get("metadata", {})
+        data = []
+        for row in rows:
+            metadata = row.get("metadata", {})
+            if "granularity" in row:
+                for day_data in row["granularity"]:
+                    entry = {"date": day_data.get("date")}
+                    entry.update(self._parse_keyword_row(day_data, metadata, campaign_id, False))
+                    data.append(entry)
+            else:
+                metrics = row.get("metrics", {})
+                entry = {"date": metadata.get("date")}
+                entry.update(self._parse_keyword_row(metrics, metadata, campaign_id, True))
+                data.append(entry)
 
-                if "granularity" in row:
-                    for day_data in row["granularity"]:
-                        bid_amount = metadata.get("bidAmount", {})
-                        data.append(
-                            {
-                                "date": day_data.get("date"),
-                                "campaign_id": campaign_id,
-                                "adgroup_id": metadata.get("adGroupId"),
-                                "keyword_id": metadata.get("keywordId"),
-                                "keyword": metadata.get("keyword"),
-                                "keyword_status": metadata.get("keywordStatus"),
-                                "match_type": metadata.get("matchType"),
-                                "bid_amount": (
-                                    float(bid_amount.get("amount", 0)) if bid_amount else 0
-                                ),
-                                "impressions": day_data.get("impressions", 0),
-                                "taps": day_data.get("taps", 0),
-                                "installs": day_data.get("totalInstalls", 0),
-                                "spend": float(day_data.get("localSpend", {}).get("amount", 0)),
-                                "currency": day_data.get("localSpend", {}).get("currency", "USD"),
-                                "avg_cpa": float(day_data.get("totalAvgCPI", {}).get("amount", 0)),
-                                "avg_cpt": float(day_data.get("avgCPT", {}).get("amount", 0)),
-                                "ttr": day_data.get("ttr", 0),
-                                "conversion_rate": day_data.get("totalInstallRate", 0),
-                            }
-                        )
-                else:
-                    metrics = row.get("metrics", {})
-                    bid_amount = metadata.get("bidAmount", {})
-                    data.append(
-                        {
-                            "date": metadata.get("date"),
-                            "campaign_id": campaign_id,
-                            "adgroup_id": metadata.get("adGroupId"),
-                            "keyword_id": metadata.get("keywordId"),
-                            "keyword": metadata.get("keyword"),
-                            "keyword_status": metadata.get("keywordStatus"),
-                            "match_type": metadata.get("matchType"),
-                            "bid_amount": float(bid_amount.get("amount", 0)) if bid_amount else 0,
-                            "impressions": metrics.get("impressions", 0),
-                            "taps": metrics.get("taps", 0),
-                            "installs": metrics.get("installs", 0),
-                            "spend": float(metrics.get("localSpend", {}).get("amount", 0)),
-                            "currency": metrics.get("localSpend", {}).get("currency", "USD"),
-                            "avg_cpa": float(metrics.get("avgCPA", {}).get("amount", 0)),
-                            "avg_cpt": float(metrics.get("avgCPT", {}).get("amount", 0)),
-                            "ttr": metrics.get("ttr", 0),
-                            "conversion_rate": metrics.get("conversionRate", 0),
-                        }
-                    )
-
-            return pd.DataFrame(data)
-
-        return pd.DataFrame()
+        return pd.DataFrame(data)
 
     def get_daily_spend(self, days: int = 30, fetch_all_orgs: bool = True) -> pd.DataFrame:
         """
@@ -725,6 +638,65 @@ class AppleSearchAdsClient:
 
         return campaigns
 
+    def _fetch_campaign_reports_from_orgs(
+        self,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+        fetch_all_orgs: bool,
+        add_org_info: bool = False,
+    ) -> List[pd.DataFrame]:
+        """Fetch campaign reports from one or all organizations."""
+        all_campaign_data: List[pd.DataFrame] = []
+
+        if fetch_all_orgs:
+            for org in self.get_all_organizations():
+                org_id = str(org["orgId"])
+                current_org_id = self.org_id
+                self.org_id = org_id
+                try:
+                    df = self.get_campaign_report(start_date, end_date)
+                    if not df.empty:
+                        if add_org_info:
+                            df["org_id"] = org_id
+                            df["org_name"] = org.get("orgName", "Unknown")
+                        all_campaign_data.append(df)
+                except Exception:
+                    pass
+                finally:
+                    self.org_id = current_org_id
+        else:
+            df = self.get_campaign_report(start_date, end_date)
+            if not df.empty:
+                all_campaign_data.append(df)
+
+        return all_campaign_data
+
+    def _add_derived_metrics(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add derived metrics (cpi, ctr, cvr) to a DataFrame."""
+        df["cpi"] = df.apply(
+            lambda x: x["spend"] / x["installs"] if x["installs"] > 0 else 0, axis=1
+        ).round(2)
+        df["ctr"] = df.apply(
+            lambda x: (x["taps"] / x["impressions"] * 100) if x["impressions"] > 0 else 0, axis=1
+        ).round(2)
+        df["cvr"] = df.apply(
+            lambda x: (x["installs"] / x["taps"] * 100) if x["taps"] > 0 else 0, axis=1
+        ).round(2)
+        return df
+
+    def _filter_by_date_range(
+        self, df: pd.DataFrame, start_date: datetime, end_date: datetime
+    ) -> pd.DataFrame:
+        """Filter DataFrame to only include rows within the date range."""
+        df["date_dt"] = pd.to_datetime(df["date"])
+        start_date_only = start_date.date() if hasattr(start_date, "date") else start_date
+        end_date_only = end_date.date() if hasattr(end_date, "date") else end_date
+        filtered = df[
+            (df["date_dt"].dt.date >= start_date_only) & (df["date_dt"].dt.date <= end_date_only)
+        ].copy()
+        filtered.drop("date_dt", axis=1, inplace=True)
+        return filtered
+
     def get_daily_spend_by_app(
         self,
         start_date: Union[datetime, str],
@@ -749,62 +721,23 @@ class AppleSearchAdsClient:
             - installs: Total conversions/installs
             - campaigns: Number of active campaigns
         """
-        # First, get campaign-to-app mapping
         campaigns = self.get_campaigns_with_details(fetch_all_orgs=fetch_all_orgs)
         campaign_to_app = {str(c["id"]): str(c.get("adamId")) for c in campaigns if c.get("adamId")}
 
-        # Get campaign reports from all organizations
-        all_campaign_data = []
-
-        if fetch_all_orgs:
-            organizations = self.get_all_organizations()
-
-            for org in organizations:
-                org_id = str(org["orgId"])
-                org_name = org.get("orgName", "Unknown")
-
-                # Set org context
-                current_org_id = self.org_id
-                self.org_id = org_id
-
-                try:
-                    # Get campaign report for this org
-                    org_campaign_df = self.get_campaign_report(start_date, end_date)
-                    if not org_campaign_df.empty:
-                        # Add org info to the dataframe
-                        org_campaign_df["org_id"] = org_id
-                        org_campaign_df["org_name"] = org_name
-                        all_campaign_data.append(org_campaign_df)
-                except Exception:
-                    pass
-                finally:
-                    # Restore original org_id
-                    self.org_id = current_org_id
-        else:
-            # Just get from default org
-            campaign_df = self.get_campaign_report(start_date, end_date)
-            if not campaign_df.empty:
-                all_campaign_data.append(campaign_df)
-
-        if not all_campaign_data:
+        all_data = self._fetch_campaign_reports_from_orgs(
+            start_date, end_date, fetch_all_orgs, add_org_info=True
+        )
+        if not all_data:
             return pd.DataFrame()
 
-        # Combine all campaign data
-        campaign_df = pd.concat(all_campaign_data, ignore_index=True)
-
-        # Convert campaign_id to string for mapping
+        campaign_df = pd.concat(all_data, ignore_index=True)
         campaign_df["campaign_id"] = campaign_df["campaign_id"].astype(str)
-
-        # Map campaigns to apps
         campaign_df["app_id"] = campaign_df["campaign_id"].map(campaign_to_app)
 
-        # Filter out campaigns without app mapping
         app_df = campaign_df[campaign_df["app_id"].notna()].copy()
-
         if app_df.empty:
             return pd.DataFrame()
 
-        # Aggregate by date and app
         aggregated = (
             app_df.groupby(["date", "app_id"])
             .agg(
@@ -818,42 +751,10 @@ class AppleSearchAdsClient:
             )
             .reset_index()
         )
-
-        # Rename columns to match standard format
         aggregated.rename(columns={"campaign_id": "campaigns"}, inplace=True)
-
-        # Add derived metrics
-        aggregated["cpi"] = aggregated.apply(
-            lambda x: x["spend"] / x["installs"] if x["installs"] > 0 else 0, axis=1
-        ).round(2)
-
-        aggregated["ctr"] = aggregated.apply(
-            lambda x: (x["taps"] / x["impressions"] * 100) if x["impressions"] > 0 else 0, axis=1
-        ).round(2)
-
-        aggregated["cvr"] = aggregated.apply(
-            lambda x: (x["installs"] / x["taps"] * 100) if x["taps"] > 0 else 0, axis=1
-        ).round(2)
-
-        # Sort by date and app
+        aggregated = self._add_derived_metrics(aggregated)
         aggregated.sort_values(["date", "app_id"], inplace=True)
 
-        # Filter to ensure we only return data within the requested date range
-        if isinstance(start_date, str):
-            start_date = datetime.strptime(start_date, "%Y-%m-%d")
-        if isinstance(end_date, str):
-            end_date = datetime.strptime(end_date, "%Y-%m-%d")
-
-        aggregated["date_dt"] = pd.to_datetime(aggregated["date"])
-        start_date_only = start_date.date() if hasattr(start_date, "date") else start_date
-        end_date_only = end_date.date() if hasattr(end_date, "date") else end_date
-
-        aggregated = aggregated[
-            (aggregated["date_dt"].dt.date >= start_date_only)
-            & (aggregated["date_dt"].dt.date <= end_date_only)
-        ].copy()
-
-        # Drop the temporary datetime column
-        aggregated.drop("date_dt", axis=1, inplace=True)
-
-        return aggregated
+        start_dt = self._parse_date_param(start_date)
+        end_dt = self._parse_date_param(end_date)
+        return self._filter_by_date_range(aggregated, start_dt, end_dt)
