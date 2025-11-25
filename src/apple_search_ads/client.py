@@ -906,3 +906,217 @@ class AppleSearchAdsClient:
         start_dt = self._parse_date_param(start_date)
         end_dt = self._parse_date_param(end_date)
         return self._filter_by_date_range(aggregated, start_dt, end_dt)
+
+    def create_impression_share_report(
+        self,
+        name: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+        granularity: str = "DAILY",
+        countries: Optional[List[str]] = None,
+        adam_ids: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create an impression share report request.
+
+        This is an async operation - the report is queued and must be polled
+        for completion using get_impression_share_report().
+
+        Args:
+            name: A unique name for the report
+            start_date: Start date for the report (datetime or YYYY-MM-DD string)
+            end_date: End date for the report (datetime or YYYY-MM-DD string)
+            granularity: DAILY or WEEKLY
+            countries: Optional list of country codes to filter (e.g., ["US", "AU"])
+            adam_ids: Optional list of app Adam IDs to filter
+
+        Returns:
+            Dict with report info including 'id', 'state', 'downloadUri', etc.
+
+        Note:
+            - Max 10 reports per 24 hours
+            - Max 30 day range
+            - Reports available for dates after 2020-04-12
+            - WEEKLY granularity requires dateRange, not custom dates
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        start_date = self._parse_date_param(start_date)
+        end_date = self._parse_date_param(end_date)
+
+        request_data: Dict[str, Any] = {
+            "name": name,
+            "startTime": start_date.strftime("%Y-%m-%d"),
+            "endTime": end_date.strftime("%Y-%m-%d"),
+            "granularity": granularity,
+        }
+
+        # Build selector conditions
+        conditions = []
+        if countries:
+            conditions.append(
+                {
+                    "field": "countryOrRegion",
+                    "operator": "IN",
+                    "values": countries,
+                }
+            )
+        if adam_ids:
+            conditions.append(
+                {
+                    "field": "adamId",
+                    "operator": "IN",
+                    "values": adam_ids,
+                }
+            )
+
+        if conditions:
+            request_data["selector"] = {"conditions": conditions}
+
+        url = f"{self.BASE_URL}/custom-reports"
+        response = self._make_request(url, method="POST", json_data=request_data)
+
+        if response and "data" in response:
+            return response["data"]
+
+        return {}
+
+    def get_impression_share_report(self, report_id: Union[int, str]) -> Dict[str, Any]:
+        """
+        Get the status and info of an impression share report.
+
+        Args:
+            report_id: The report ID returned from create_impression_share_report()
+
+        Returns:
+            Dict with report info including:
+            - id: Report ID
+            - name: Report name
+            - state: QUEUED, PROCESSING, or COMPLETED
+            - downloadUri: URL to download report (when COMPLETED)
+            - dimensions: List of dimension fields
+            - metrics: List of metric fields
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        url = f"{self.BASE_URL}/custom-reports/{report_id}"
+        response = self._make_request(url, method="GET")
+
+        if response and "data" in response:
+            return response["data"]
+
+        return {}
+
+    def get_impression_share_data(
+        self,
+        name: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+        granularity: str = "DAILY",
+        countries: Optional[List[str]] = None,
+        adam_ids: Optional[List[str]] = None,
+        poll_interval: int = 5,
+        max_wait: int = 300,
+    ) -> pd.DataFrame:
+        """
+        Get impression share data as a DataFrame.
+
+        This is a convenience method that:
+        1. Creates an impression share report
+        2. Polls until the report is COMPLETED
+        3. Downloads and parses the report data
+
+        Args:
+            name: A unique name for the report
+            start_date: Start date for the report (datetime or YYYY-MM-DD string)
+            end_date: End date for the report (datetime or YYYY-MM-DD string)
+            granularity: DAILY or WEEKLY
+            countries: Optional list of country codes to filter (e.g., ["US", "AU"])
+            adam_ids: Optional list of app Adam IDs to filter
+            poll_interval: Seconds between status checks (default: 5)
+            max_wait: Maximum seconds to wait for report (default: 300)
+
+        Returns:
+            DataFrame with impression share metrics including:
+            - appName, adamId, countryOrRegion, searchTerm (dimensions)
+            - lowImpressionShare, highImpressionShare, rank, searchPopularity (metrics)
+
+        Raises:
+            TimeoutError: If report doesn't complete within max_wait seconds
+        """
+        import time
+
+        # Create the report
+        report = self.create_impression_share_report(
+            name=name,
+            start_date=start_date,
+            end_date=end_date,
+            granularity=granularity,
+            countries=countries,
+            adam_ids=adam_ids,
+        )
+
+        if not report or "id" not in report:
+            return pd.DataFrame()
+
+        report_id = report["id"]
+        elapsed = 0
+
+        # Poll for completion
+        while elapsed < max_wait:
+            report_status = self.get_impression_share_report(report_id)
+            state = report_status.get("state", "")
+
+            if state == "COMPLETED":
+                download_uri = report_status.get("downloadUri")
+                if download_uri:
+                    return self._download_impression_share_report(download_uri)
+                return pd.DataFrame()
+
+            if state not in ("QUEUED", "PROCESSING"):
+                # Unknown or error state
+                return pd.DataFrame()
+
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+
+        raise TimeoutError(
+            f"Impression share report {report_id} did not complete within {max_wait} seconds"
+        )
+
+    def _download_impression_share_report(self, download_uri: str) -> pd.DataFrame:
+        """
+        Download and parse an impression share report from the given URI.
+
+        Args:
+            download_uri: The downloadUri from a completed report
+
+        Returns:
+            DataFrame with the report data
+        """
+        import requests as req
+
+        try:
+            response = req.get(download_uri, timeout=60)
+            response.raise_for_status()
+
+            # The response is typically CSV or JSON - try to parse
+            content_type = response.headers.get("Content-Type", "")
+
+            if "json" in content_type:
+                data = response.json()
+                if isinstance(data, list):
+                    return pd.DataFrame(data)
+                elif isinstance(data, dict) and "data" in data:
+                    return pd.DataFrame(data["data"])
+                return pd.DataFrame([data])
+            else:
+                # Assume CSV
+                from io import StringIO
+
+                return pd.read_csv(StringIO(response.text))
+
+        except Exception:
+            return pd.DataFrame()

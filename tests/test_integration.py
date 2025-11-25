@@ -371,3 +371,40 @@ class TestAppleSearchAdsIntegration:
                 print(f"Sample search terms: {df['search_term'].head().tolist()}")
         else:
             pytest.skip("No campaigns available for testing search terms")
+
+    @pytest.mark.slow
+    def test_impression_share_report(self, client):
+        """Test creating and fetching an impression share report."""
+        # Ensure we have an org set
+        if not client.org_id:
+            orgs = client.get_all_organizations()
+            if orgs:
+                client.org_id = str(orgs[0]["orgId"])
+
+        # Use a unique name with timestamp to avoid conflicts
+        import time
+
+        report_name = f"integration_test_{int(time.time())}"
+
+        end_date = datetime.now() - timedelta(days=2)
+        start_date = end_date - timedelta(days=7)
+
+        # Create the report
+        report = client.create_impression_share_report(
+            name=report_name,
+            start_date=start_date,
+            end_date=end_date,
+            granularity="DAILY",
+            countries=["US"],
+        )
+
+        assert report is not None
+        assert "id" in report
+        assert "state" in report
+        print(f"Created impression share report: {report['id']}, state: {report['state']}")
+
+        # Check report status
+        report_status = client.get_impression_share_report(report["id"])
+        assert report_status is not None
+        assert "state" in report_status
+        print(f"Report status: {report_status['state']}")

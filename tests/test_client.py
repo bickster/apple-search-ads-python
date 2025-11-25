@@ -1335,3 +1335,180 @@ class TestAppleSearchAdsClient:
 
         mock_get_org_id.assert_called_once()
         assert df.empty
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_create_impression_share_report(self, mock_make_request, client):
+        """Test creating an impression share report."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "id": 986235,
+                "name": "test_report",
+                "startTime": "2024-01-20",
+                "endTime": "2024-01-29",
+                "granularity": "DAILY",
+                "state": "QUEUED",
+                "downloadUri": "https://blobstore.apple.com...",
+            }
+        }
+
+        result = client.create_impression_share_report(
+            name="test_report",
+            start_date="2024-01-20",
+            end_date="2024-01-29",
+            granularity="DAILY",
+            countries=["US", "AU"],
+        )
+
+        assert result["id"] == 986235
+        assert result["name"] == "test_report"
+        assert result["state"] == "QUEUED"
+
+        # Verify the request was made with correct data
+        call_args = mock_make_request.call_args
+        assert call_args[1]["method"] == "POST"
+        json_data = call_args[1]["json_data"]
+        assert json_data["name"] == "test_report"
+        assert json_data["granularity"] == "DAILY"
+        assert "selector" in json_data
+        assert json_data["selector"]["conditions"][0]["field"] == "countryOrRegion"
+        assert json_data["selector"]["conditions"][0]["values"] == ["US", "AU"]
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_create_impression_share_report_with_adam_ids(self, mock_make_request, client):
+        """Test creating an impression share report with adam_ids filter."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "id": 986236,
+                "name": "test_report_2",
+                "state": "QUEUED",
+            }
+        }
+
+        result = client.create_impression_share_report(
+            name="test_report_2",
+            start_date="2024-01-20",
+            end_date="2024-01-29",
+            adam_ids=["1252497129", "282614216"],
+        )
+
+        assert result["id"] == 986236
+
+        # Verify adam_ids condition was added
+        call_args = mock_make_request.call_args
+        json_data = call_args[1]["json_data"]
+        assert json_data["selector"]["conditions"][0]["field"] == "adamId"
+        assert json_data["selector"]["conditions"][0]["values"] == ["1252497129", "282614216"]
+
+    @patch.object(AppleSearchAdsClient, "_get_org_id")
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_create_impression_share_report_no_org_id(
+        self, mock_make_request, mock_get_org_id, client
+    ):
+        """Test creating impression share report when org_id needs to be fetched."""
+        client.org_id = None
+        mock_make_request.return_value = {"data": {"id": 123, "state": "QUEUED"}}
+
+        client.create_impression_share_report(
+            name="test", start_date="2024-01-01", end_date="2024-01-07"
+        )
+
+        mock_get_org_id.assert_called_once()
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_impression_share_report(self, mock_make_request, client):
+        """Test getting impression share report status."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "id": 7615231,
+                "name": "test_report",
+                "state": "COMPLETED",
+                "downloadUri": "https://blobstore.apple.com...",
+                "dimensions": ["appName", "adamId", "countryOrRegion", "searchTerm"],
+                "metrics": ["lowImpressionShare", "highImpressionShare", "rank"],
+            }
+        }
+
+        result = client.get_impression_share_report(7615231)
+
+        assert result["id"] == 7615231
+        assert result["state"] == "COMPLETED"
+        assert "downloadUri" in result
+        assert "lowImpressionShare" in result["metrics"]
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_impression_share_report_empty(self, mock_make_request, client):
+        """Test getting impression share report with empty response."""
+        client.org_id = "123"
+        mock_make_request.return_value = {}
+
+        result = client.get_impression_share_report(999)
+
+        assert result == {}
+
+    @patch.object(AppleSearchAdsClient, "_download_impression_share_report")
+    @patch.object(AppleSearchAdsClient, "get_impression_share_report")
+    @patch.object(AppleSearchAdsClient, "create_impression_share_report")
+    def test_get_impression_share_data(self, mock_create, mock_get_report, mock_download, client):
+        """Test the convenience method that creates, polls, and downloads."""
+        client.org_id = "123"
+        mock_create.return_value = {"id": 123, "state": "QUEUED"}
+        mock_get_report.return_value = {
+            "id": 123,
+            "state": "COMPLETED",
+            "downloadUri": "https://example.com/report.csv",
+        }
+        mock_download.return_value = pd.DataFrame(
+            {
+                "appName": ["Test App"],
+                "searchTerm": ["test keyword"],
+                "lowImpressionShare": [0.1],
+                "highImpressionShare": [0.3],
+            }
+        )
+
+        df = client.get_impression_share_data(
+            name="test",
+            start_date="2024-01-01",
+            end_date="2024-01-07",
+            countries=["US"],
+            poll_interval=0,  # No delay for tests
+        )
+
+        assert not df.empty
+        assert "appName" in df.columns
+        assert "lowImpressionShare" in df.columns
+        mock_create.assert_called_once()
+        mock_get_report.assert_called()
+        mock_download.assert_called_once()
+
+    @patch.object(AppleSearchAdsClient, "get_impression_share_report")
+    @patch.object(AppleSearchAdsClient, "create_impression_share_report")
+    def test_get_impression_share_data_timeout(self, mock_create, mock_get_report, client):
+        """Test timeout when report doesn't complete."""
+        client.org_id = "123"
+        mock_create.return_value = {"id": 123, "state": "QUEUED"}
+        mock_get_report.return_value = {"id": 123, "state": "PROCESSING"}
+
+        with pytest.raises(TimeoutError):
+            client.get_impression_share_data(
+                name="test",
+                start_date="2024-01-01",
+                end_date="2024-01-07",
+                poll_interval=0,
+                max_wait=0,  # Immediate timeout
+            )
+
+    @patch.object(AppleSearchAdsClient, "create_impression_share_report")
+    def test_get_impression_share_data_create_fails(self, mock_create, client):
+        """Test when report creation fails."""
+        client.org_id = "123"
+        mock_create.return_value = {}
+
+        df = client.get_impression_share_data(
+            name="test", start_date="2024-01-01", end_date="2024-01-07"
+        )
+
+        assert df.empty

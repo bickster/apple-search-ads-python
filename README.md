@@ -173,6 +173,42 @@ print(search_term_report[['search_term', 'search_term_source', 'spend', 'install
 auto_terms = search_term_report[search_term_report['search_term_source'] == 'AUTO']
 ```
 
+### Get impression share report
+
+```python
+# Impression share reports are async - they must be created, then polled for completion
+
+# Option 1: Use the convenience method (handles create, poll, download automatically)
+df = client.get_impression_share_data(
+    name="my_impression_report",
+    start_date="2024-01-01",
+    end_date="2024-01-30",
+    granularity="DAILY",
+    countries=["US", "AU"],  # Optional: filter by countries
+    adam_ids=["1234567890"],  # Optional: filter by app IDs
+    poll_interval=5,  # Seconds between status checks
+    max_wait=300  # Max seconds to wait for completion
+)
+
+print(df[['appName', 'searchTerm', 'lowImpressionShare', 'highImpressionShare', 'rank']])
+
+# Option 2: Manual control over the process
+report = client.create_impression_share_report(
+    name="my_report",
+    start_date="2024-01-01",
+    end_date="2024-01-30",
+    granularity="DAILY",
+    countries=["US"]
+)
+print(f"Report ID: {report['id']}, State: {report['state']}")
+
+# Poll for completion
+status = client.get_impression_share_report(report['id'])
+print(f"State: {status['state']}")  # QUEUED, PROCESSING, or COMPLETED
+```
+
+Note: Impression share reports have a limit of 10 reports per 24 hours and max 30 day range.
+
 ### Track spend by app
 
 ```python
@@ -259,6 +295,12 @@ AppleSearchAdsClient(
 - `get_daily_spend(days=30, fetch_all_orgs=True)` - Get daily spend for the last N days
 - `get_daily_spend_with_dates(start_date, end_date, fetch_all_orgs=True)` - Get daily spend for date range
 - `get_daily_spend_by_app(start_date, end_date, fetch_all_orgs=True)` - Get spend grouped by app
+
+#### Impression Share Reports
+
+- `create_impression_share_report(name, start_date, end_date, ...)` - Create an async impression share report
+- `get_impression_share_report(report_id)` - Get report status and info
+- `get_impression_share_data(name, start_date, end_date, ...)` - Convenience method: create, poll, and download
 
 #### Campaign Management
 
