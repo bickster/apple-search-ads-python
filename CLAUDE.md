@@ -38,14 +38,37 @@ mypy src
 ### Development Setup
 ```bash
 # Install package in development mode
-pip install -e .
+python3 -m pip install -e .
 
 # Install development dependencies
-pip install -r requirements-dev.txt
+python3 -m pip install -r requirements-dev.txt
 
 # Build the package
 python -m build
 ```
+
+### Development Workflow
+
+After making changes to source code, always follow this workflow:
+
+```bash
+# 1. Reinstall package in dev mode (IMPORTANT: tests import from installed package)
+python3 -m pip install -e .
+
+# 2. Format code first
+black src tests
+
+# 3. Run tests
+pytest tests -v --cov=apple_search_ads --cov-report=term-missing
+
+# 4. Check linting
+flake8 src tests --max-line-length=127
+```
+
+**Key gotchas:**
+- Use `python3 -m pip` instead of `pip` (more reliable across environments, especially macOS)
+- Always reinstall with `pip install -e .` after editing source files, or tests will run against the old installed version
+- Run `black` before committing to avoid formatting-only commits
 
 ## Architecture Overview
 

@@ -887,3 +887,235 @@ class TestAppleSearchAdsClient:
         assert len(result) == 1
         assert result.iloc[0]["date"] == "2024-01-01"
         assert result.iloc[0]["spend"] == 20.0
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_adgroup_report(self, mock_make_request, client):
+        """Test fetching ad group report."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "reportingDataResponse": {
+                    "row": [
+                        {
+                            "metadata": {
+                                "adGroupId": "ag1",
+                                "adGroupName": "Test Ad Group",
+                                "adGroupStatus": "ENABLED",
+                            },
+                            "granularity": [
+                                {
+                                    "date": "2024-01-01",
+                                    "impressions": 500,
+                                    "taps": 25,
+                                    "totalInstalls": 5,
+                                    "localSpend": {"amount": 50.0, "currency": "USD"},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+
+        df = client.get_adgroup_report("campaign123", "2024-01-01", "2024-01-07")
+
+        assert not df.empty
+        assert len(df) == 1
+        assert df.iloc[0]["adgroup_name"] == "Test Ad Group"
+        assert df.iloc[0]["adgroup_id"] == "ag1"
+        assert df.iloc[0]["campaign_id"] == "campaign123"
+        assert df.iloc[0]["spend"] == 50.0
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_adgroup_report_legacy_format(self, mock_make_request, client):
+        """Test ad group report with legacy 'metrics' format."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "rows": [
+                    {
+                        "metadata": {
+                            "date": "2024-01-01",
+                            "adGroupId": "ag1",
+                            "adGroupName": "Legacy Ad Group",
+                            "adGroupStatus": "PAUSED",
+                        },
+                        "metrics": {
+                            "impressions": 200,
+                            "taps": 10,
+                            "installs": 2,
+                            "localSpend": {"amount": 25.0, "currency": "USD"},
+                        },
+                    }
+                ]
+            }
+        }
+
+        df = client.get_adgroup_report("campaign123", datetime(2024, 1, 1), datetime(2024, 1, 7))
+
+        assert not df.empty
+        assert len(df) == 1
+        assert df.iloc[0]["adgroup_name"] == "Legacy Ad Group"
+        assert df.iloc[0]["adgroup_status"] == "PAUSED"
+        assert df.iloc[0]["spend"] == 25.0
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_adgroup_report_empty(self, mock_make_request, client):
+        """Test ad group report with empty response."""
+        client.org_id = "123"
+        mock_make_request.return_value = {"data": {"reportingDataResponse": {"row": []}}}
+
+        df = client.get_adgroup_report("campaign123", "2024-01-01", "2024-01-07")
+
+        assert df.empty
+
+    @patch.object(AppleSearchAdsClient, "_get_org_id")
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_adgroup_report_no_org_id(self, mock_make_request, mock_get_org_id, client):
+        """Test ad group report when org_id needs to be fetched."""
+        client.org_id = None
+        mock_make_request.return_value = {"data": {"reportingDataResponse": {"row": []}}}
+
+        df = client.get_adgroup_report("campaign123", "2024-01-01", "2024-01-07")
+
+        mock_get_org_id.assert_called_once()
+        assert df.empty
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keyword_report(self, mock_make_request, client):
+        """Test fetching keyword report."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "reportingDataResponse": {
+                    "row": [
+                        {
+                            "metadata": {
+                                "keywordId": "kw1",
+                                "keyword": "test keyword",
+                                "keywordStatus": "ACTIVE",
+                                "matchType": "EXACT",
+                                "adGroupId": "ag1",
+                                "bidAmount": {"amount": 1.50, "currency": "USD"},
+                            },
+                            "granularity": [
+                                {
+                                    "date": "2024-01-01",
+                                    "impressions": 100,
+                                    "taps": 10,
+                                    "totalInstalls": 2,
+                                    "localSpend": {"amount": 15.0, "currency": "USD"},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+
+        df = client.get_keyword_report("campaign123", "2024-01-01", "2024-01-07")
+
+        assert not df.empty
+        assert len(df) == 1
+        assert df.iloc[0]["keyword"] == "test keyword"
+        assert df.iloc[0]["keyword_id"] == "kw1"
+        assert df.iloc[0]["match_type"] == "EXACT"
+        assert df.iloc[0]["bid_amount"] == 1.50
+        assert df.iloc[0]["campaign_id"] == "campaign123"
+        assert df.iloc[0]["adgroup_id"] == "ag1"
+        assert df.iloc[0]["spend"] == 15.0
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keyword_report_legacy_format(self, mock_make_request, client):
+        """Test keyword report with legacy 'metrics' format."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "rows": [
+                    {
+                        "metadata": {
+                            "date": "2024-01-01",
+                            "keywordId": "kw1",
+                            "keyword": "legacy keyword",
+                            "keywordStatus": "PAUSED",
+                            "matchType": "BROAD",
+                            "adGroupId": "ag1",
+                            "bidAmount": {"amount": 2.00, "currency": "USD"},
+                        },
+                        "metrics": {
+                            "impressions": 50,
+                            "taps": 5,
+                            "installs": 1,
+                            "localSpend": {"amount": 10.0, "currency": "USD"},
+                        },
+                    }
+                ]
+            }
+        }
+
+        df = client.get_keyword_report("campaign123", datetime(2024, 1, 1), datetime(2024, 1, 7))
+
+        assert not df.empty
+        assert len(df) == 1
+        assert df.iloc[0]["keyword"] == "legacy keyword"
+        assert df.iloc[0]["match_type"] == "BROAD"
+        assert df.iloc[0]["bid_amount"] == 2.00
+        assert df.iloc[0]["spend"] == 10.0
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keyword_report_no_bid_amount(self, mock_make_request, client):
+        """Test keyword report when bid_amount is missing."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "reportingDataResponse": {
+                    "row": [
+                        {
+                            "metadata": {
+                                "keywordId": "kw1",
+                                "keyword": "no bid keyword",
+                                "keywordStatus": "ACTIVE",
+                                "matchType": "EXACT",
+                                "adGroupId": "ag1",
+                            },
+                            "granularity": [
+                                {
+                                    "date": "2024-01-01",
+                                    "impressions": 100,
+                                    "taps": 10,
+                                    "totalInstalls": 2,
+                                    "localSpend": {"amount": 15.0, "currency": "USD"},
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+
+        df = client.get_keyword_report("campaign123", "2024-01-01", "2024-01-07")
+
+        assert not df.empty
+        assert df.iloc[0]["bid_amount"] == 0
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keyword_report_empty(self, mock_make_request, client):
+        """Test keyword report with empty response."""
+        client.org_id = "123"
+        mock_make_request.return_value = {"data": {"reportingDataResponse": {"row": []}}}
+
+        df = client.get_keyword_report("campaign123", "2024-01-01", "2024-01-07")
+
+        assert df.empty
+
+    @patch.object(AppleSearchAdsClient, "_get_org_id")
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keyword_report_no_org_id(self, mock_make_request, mock_get_org_id, client):
+        """Test keyword report when org_id needs to be fetched."""
+        client.org_id = None
+        mock_make_request.return_value = {"data": {"reportingDataResponse": {"row": []}}}
+
+        df = client.get_keyword_report("campaign123", "2024-01-01", "2024-01-07")
+
+        mock_get_org_id.assert_called_once()
+        assert df.empty
