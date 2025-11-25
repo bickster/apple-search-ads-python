@@ -115,8 +115,8 @@ Tests use pytest with fixtures defined in `tests/conftest.py`. Key testing patte
 
 ## Important Notes
 
-- Python 3.8+ is required
+- Python 3.13+ is required
 - The package follows strict type checking with mypy
 - All code should be formatted with black (100 char line length)
-- The CI/CD pipeline tests on Python 3.8-3.12
+- The CI/CD pipeline tests on Python 3.13
 - Version tags trigger automatic PyPI publishing
