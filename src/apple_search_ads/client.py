@@ -531,6 +531,78 @@ class AppleSearchAdsClient:
 
         return pd.DataFrame(data)
 
+    def _parse_search_term_row(
+        self, row: Dict[str, Any], metadata: Dict[str, Any], campaign_id: str, is_legacy: bool
+    ) -> Dict[str, Any]:
+        """Parse a single search term row into a flat dict."""
+        base = {
+            "campaign_id": campaign_id,
+            "adgroup_id": metadata.get("adGroupId"),
+            "keyword_id": metadata.get("keywordId"),
+            "keyword": metadata.get("keyword"),
+            "search_term": metadata.get("searchTermText"),
+            "search_term_source": metadata.get("searchTermSource"),
+            "match_type": metadata.get("matchType"),
+        }
+        base.update(self._parse_metrics(row, is_legacy))
+        return base
+
+    def get_search_term_report(
+        self,
+        campaign_id: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+        granularity: str = "DAILY",
+    ) -> pd.DataFrame:
+        """
+        Get search term performance report for a specific campaign.
+
+        Args:
+            campaign_id: The campaign ID to get search term reports for
+            start_date: Start date for the report (datetime or YYYY-MM-DD string)
+            end_date: End date for the report (datetime or YYYY-MM-DD string)
+            granularity: DAILY, WEEKLY, or MONTHLY
+
+        Returns:
+            DataFrame with search term performance metrics including:
+            - search_term: The actual search term used
+            - search_term_source: AUTO or TARGETED
+            - keyword: The matched keyword (if targeted)
+            - match_type: BROAD, EXACT, or SEARCH_MATCH
+            - Standard metrics (impressions, taps, installs, spend, etc.)
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        start_date = self._parse_date_param(start_date)
+        end_date = self._parse_date_param(end_date)
+
+        url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/searchterms"
+        request_data = self._build_report_request(start_date, end_date, granularity)
+        response = self._make_request(url, method="POST", json_data=request_data)
+        rows = self._extract_rows_from_response(response)
+
+        if not rows:
+            return pd.DataFrame()
+
+        data = []
+        for row in rows:
+            metadata = row.get("metadata", {})
+            if "granularity" in row:
+                for day_data in row["granularity"]:
+                    entry = {"date": day_data.get("date")}
+                    entry.update(
+                        self._parse_search_term_row(day_data, metadata, campaign_id, False)
+                    )
+                    data.append(entry)
+            else:
+                metrics = row.get("metrics", {})
+                entry = {"date": metadata.get("date")}
+                entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, True))
+                data.append(entry)
+
+        return pd.DataFrame(data)
+
     def get_daily_spend(self, days: int = 30, fetch_all_orgs: bool = True) -> pd.DataFrame:
         """
         Get daily spend across all campaigns.
