@@ -703,6 +703,45 @@ class TestAppleSearchAdsClient:
 
         assert df.empty
 
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_campaign_report_with_null_nested_fields(self, mock_make_request, client):
+        """Test campaign report handles None values in nested fields like totalAvgCPI."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "reportingDataResponse": {
+                    "row": [
+                        {
+                            "metadata": {
+                                "campaignId": "1",
+                                "campaignName": "Test Campaign",
+                            },
+                            "granularity": [
+                                {
+                                    "date": "2024-01-01",
+                                    "impressions": 100,
+                                    "taps": 10,
+                                    "totalInstalls": 2,
+                                    "localSpend": None,
+                                    "totalAvgCPI": None,
+                                    "avgCPT": None,
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        }
+
+        df = client.get_campaign_report("2024-01-01", "2024-01-07")
+
+        assert not df.empty
+        assert len(df) == 1
+        assert df.iloc[0]["spend"] == 0
+        assert df.iloc[0]["avg_cpa"] == 0
+        assert df.iloc[0]["avg_cpt"] == 0
+        assert df.iloc[0]["currency"] == "USD"
+
     @patch.object(AppleSearchAdsClient, "get_all_organizations")
     @patch.object(AppleSearchAdsClient, "get_campaign_report")
     def test_get_daily_spend_empty_campaign_data(self, mock_get_report, mock_get_orgs, client):

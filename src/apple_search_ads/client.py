@@ -221,10 +221,10 @@ class AppleSearchAdsClient:
                 "impressions": day_data.get("impressions", 0),
                 "taps": day_data.get("taps", 0),
                 "installs": day_data.get("installs", 0),
-                "spend": float(day_data.get("localSpend", {}).get("amount", 0)),
-                "currency": day_data.get("localSpend", {}).get("currency", "USD"),
-                "avg_cpa": float(day_data.get("avgCPA", {}).get("amount", 0)),
-                "avg_cpt": float(day_data.get("avgCPT", {}).get("amount", 0)),
+                "spend": float((day_data.get("localSpend") or {}).get("amount", 0)),
+                "currency": (day_data.get("localSpend") or {}).get("currency", "USD"),
+                "avg_cpa": float((day_data.get("avgCPA") or {}).get("amount", 0)),
+                "avg_cpt": float((day_data.get("avgCPT") or {}).get("amount", 0)),
                 "ttr": day_data.get("ttr", 0),
                 "conversion_rate": day_data.get("conversionRate", 0),
             }
@@ -232,10 +232,10 @@ class AppleSearchAdsClient:
             "impressions": day_data.get("impressions", 0),
             "taps": day_data.get("taps", 0),
             "installs": day_data.get("totalInstalls", 0),
-            "spend": float(day_data.get("localSpend", {}).get("amount", 0)),
-            "currency": day_data.get("localSpend", {}).get("currency", "USD"),
-            "avg_cpa": float(day_data.get("totalAvgCPI", {}).get("amount", 0)),
-            "avg_cpt": float(day_data.get("avgCPT", {}).get("amount", 0)),
+            "spend": float((day_data.get("localSpend") or {}).get("amount", 0)),
+            "currency": (day_data.get("localSpend") or {}).get("currency", "USD"),
+            "avg_cpa": float((day_data.get("totalAvgCPI") or {}).get("amount", 0)),
+            "avg_cpt": float((day_data.get("avgCPT") or {}).get("amount", 0)),
             "ttr": day_data.get("ttr", 0),
             "conversion_rate": day_data.get("totalInstallRate", 0),
         }
@@ -345,7 +345,7 @@ class AppleSearchAdsClient:
         """Parse a single campaign row into a flat dict."""
         app_name = metadata.get("appName")
         if not is_legacy and "app" in metadata:
-            app_name = metadata.get("app", {}).get("appName")
+            app_name = (metadata.get("app") or {}).get("appName")
         base = {
             "campaign_id": metadata.get("campaignId"),
             "campaign_name": metadata.get("campaignName"),
@@ -469,7 +469,7 @@ class AppleSearchAdsClient:
         self, row: Dict[str, Any], metadata: Dict[str, Any], campaign_id: str, is_legacy: bool
     ) -> Dict[str, Any]:
         """Parse a single keyword row into a flat dict."""
-        bid_amount = metadata.get("bidAmount", {})
+        bid_amount = metadata.get("bidAmount") or {}
         base = {
             "campaign_id": campaign_id,
             "adgroup_id": metadata.get("adGroupId"),
