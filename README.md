@@ -163,12 +163,11 @@ campaign_id = "1234567890"
 search_term_report = client.get_search_term_report(
     campaign_id=campaign_id,
     start_date="2024-01-01",
-    end_date="2024-01-31",
-    granularity="DAILY"
+    end_date="2024-01-31"
 )
 
 # Analyze which search terms are converting
-print(search_term_report[['date', 'search_term', 'search_term_source', 'spend', 'installs']])
+print(search_term_report[['search_term', 'search_term_source', 'spend', 'installs']])
 
 # Filter by source (AUTO vs TARGETED)
 auto_terms = search_term_report[search_term_report['search_term_source'] == 'AUTO']
@@ -255,7 +254,8 @@ AppleSearchAdsClient(
 - `get_campaign_report(start_date, end_date, granularity="DAILY")` - Get campaign performance report
 - `get_adgroup_report(campaign_id, start_date, end_date, granularity="DAILY")` - Get ad group performance report for a campaign
 - `get_keyword_report(campaign_id, start_date, end_date, granularity="DAILY")` - Get keyword performance report for a campaign
-- `get_search_term_report(campaign_id, start_date, end_date, granularity="DAILY")` - Get search term performance report for a campaign
+- `get_search_term_report(campaign_id, start_date, end_date)` - Get search term performance report for a campaign
+- `get_adgroup_search_term_report(campaign_id, adgroup_id, start_date, end_date)` - Get search term performance report for an ad group
 - `get_daily_spend(days=30, fetch_all_orgs=True)` - Get daily spend for the last N days
 - `get_daily_spend_with_dates(start_date, end_date, fetch_all_orgs=True)` - Get daily spend for date range
 - `get_daily_spend_by_app(start_date, end_date, fetch_all_orgs=True)` - Get spend grouped by app

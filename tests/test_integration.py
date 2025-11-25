@@ -324,3 +324,50 @@ class TestAppleSearchAdsIntegration:
                 # Verify it's grouped by date and app
                 grouped = df.groupby(["date", "app_id"]).size()
                 assert len(grouped) == len(df)
+
+    @pytest.mark.slow
+    def test_search_term_report(self, client):
+        """Test fetching search term report with real data."""
+        # Ensure we have an org set
+        if not client.org_id:
+            orgs = client.get_all_organizations()
+            if orgs:
+                client.org_id = str(orgs[0]["orgId"])
+
+        # Only test if we have campaigns
+        campaigns = client.get_campaigns()
+
+        if campaigns:
+            campaign_id = str(campaigns[0]["id"])
+            end_date = datetime.now() - timedelta(days=2)
+            start_date = end_date - timedelta(days=30)  # Longer range for search terms
+
+            df = client.get_search_term_report(campaign_id, start_date, end_date)
+
+            assert df is not None
+
+            if not df.empty:
+                # Check expected columns
+                expected_columns = [
+                    "date",
+                    "search_term",
+                    "search_term_source",
+                    "campaign_id",
+                    "spend",
+                    "impressions",
+                    "taps",
+                    "installs",
+                ]
+                for col in expected_columns:
+                    assert col in df.columns, f"Missing column: {col}"
+
+                # Verify search_term_source values are valid
+                valid_sources = ["AUTO", "TARGETED"]
+                for source in df["search_term_source"].unique():
+                    if source is not None:
+                        assert source in valid_sources, f"Invalid source: {source}"
+
+                print(f"Found {len(df)} search term records")
+                print(f"Sample search terms: {df['search_term'].head().tolist()}")
+        else:
+            pytest.skip("No campaigns available for testing search terms")

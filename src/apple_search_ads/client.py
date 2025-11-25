@@ -188,13 +188,16 @@ class AppleSearchAdsClient:
         return date
 
     def _build_report_request(
-        self, start_date: datetime, end_date: datetime, granularity: str
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        granularity: Optional[str] = None,
+        time_zone: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Build standard report request data."""
-        return {
+        request: Dict[str, Any] = {
             "startTime": start_date.strftime("%Y-%m-%d"),
             "endTime": end_date.strftime("%Y-%m-%d"),
-            "granularity": granularity,
             "selector": {
                 "orderBy": [{"field": "localSpend", "sortOrder": "DESCENDING"}],
                 "pagination": {"limit": 1000},
@@ -202,6 +205,11 @@ class AppleSearchAdsClient:
             "returnRowTotals": True,
             "returnRecordsWithNoMetrics": False,
         }
+        if granularity:
+            request["granularity"] = granularity
+        if time_zone:
+            request["timeZone"] = time_zone
+        return request
 
     def _extract_rows_from_response(self, response: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Extract rows from different API response formats."""
@@ -552,7 +560,6 @@ class AppleSearchAdsClient:
         campaign_id: str,
         start_date: Union[datetime, str],
         end_date: Union[datetime, str],
-        granularity: str = "DAILY",
     ) -> pd.DataFrame:
         """
         Get search term performance report for a specific campaign.
@@ -561,7 +568,6 @@ class AppleSearchAdsClient:
             campaign_id: The campaign ID to get search term reports for
             start_date: Start date for the report (datetime or YYYY-MM-DD string)
             end_date: End date for the report (datetime or YYYY-MM-DD string)
-            granularity: DAILY, WEEKLY, or MONTHLY
 
         Returns:
             DataFrame with search term performance metrics including:
@@ -570,6 +576,11 @@ class AppleSearchAdsClient:
             - keyword: The matched keyword (if targeted)
             - match_type: BROAD, EXACT, or SEARCH_MATCH
             - Standard metrics (impressions, taps, installs, spend, etc.)
+
+        Note:
+            Search term reports require a minimum of 10 impressions to appear.
+            Uses ORTZ (Organization Reference Time Zone) as required by the API.
+            Search term reports do not support granularity grouping.
         """
         if not self.org_id:
             self._get_org_id()
@@ -578,7 +589,72 @@ class AppleSearchAdsClient:
         end_date = self._parse_date_param(end_date)
 
         url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/searchterms"
-        request_data = self._build_report_request(start_date, end_date, granularity)
+        request_data = self._build_report_request(start_date, end_date, time_zone="ORTZ")
+        response = self._make_request(url, method="POST", json_data=request_data)
+        rows = self._extract_rows_from_response(response)
+
+        if not rows:
+            return pd.DataFrame()
+
+        data = []
+        for row in rows:
+            metadata = row.get("metadata", {})
+            if "granularity" in row:
+                for day_data in row["granularity"]:
+                    entry = {"date": day_data.get("date")}
+                    entry.update(
+                        self._parse_search_term_row(day_data, metadata, campaign_id, False)
+                    )
+                    data.append(entry)
+            else:
+                metrics = row.get("metrics", {})
+                entry = {"date": metadata.get("date")}
+                entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, True))
+                data.append(entry)
+
+        return pd.DataFrame(data)
+
+    def get_adgroup_search_term_report(
+        self,
+        campaign_id: str,
+        adgroup_id: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+    ) -> pd.DataFrame:
+        """
+        Get search term performance report for a specific ad group.
+
+        Use this endpoint for high volume search term reports within an ad group.
+
+        Args:
+            campaign_id: The campaign ID
+            adgroup_id: The ad group ID to get search term reports for
+            start_date: Start date for the report (datetime or YYYY-MM-DD string)
+            end_date: End date for the report (datetime or YYYY-MM-DD string)
+
+        Returns:
+            DataFrame with search term performance metrics including:
+            - search_term: The actual search term used
+            - search_term_source: AUTO or TARGETED
+            - keyword: The matched keyword (if targeted)
+            - match_type: BROAD, EXACT, or SEARCH_MATCH
+            - Standard metrics (impressions, taps, installs, spend, etc.)
+
+        Note:
+            Search term reports require a minimum of 10 impressions to appear.
+            Uses ORTZ (Organization Reference Time Zone) as required by the API.
+            Search term reports do not support granularity grouping.
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        start_date = self._parse_date_param(start_date)
+        end_date = self._parse_date_param(end_date)
+
+        url = (
+            f"{self.BASE_URL}/reports/campaigns/{campaign_id}" f"/adgroups/{adgroup_id}/searchterms"
+        )
+        request_data = self._build_report_request(start_date, end_date, time_zone="ORTZ")
         response = self._make_request(url, method="POST", json_data=request_data)
         rows = self._extract_rows_from_response(response)
 
