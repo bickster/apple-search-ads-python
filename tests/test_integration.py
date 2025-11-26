@@ -373,8 +373,8 @@ class TestAppleSearchAdsIntegration:
             pytest.skip("No campaigns available for testing search terms")
 
     @pytest.mark.slow
-    def test_impression_share_report(self, client):
-        """Test creating and fetching an impression share report."""
+    def test_impression_share_report_full_flow(self, client):
+        """Test the full impression share report flow: create, poll, download, parse."""
         # Ensure we have an org set
         if not client.org_id:
             orgs = client.get_all_organizations()
@@ -382,14 +382,17 @@ class TestAppleSearchAdsIntegration:
                 client.org_id = str(orgs[0]["orgId"])
 
         # Use a unique name with timestamp to avoid conflicts
-        import time
-
         report_name = f"integration_test_{int(time.time())}"
 
+        # Use a date range that should have data
         end_date = datetime.now() - timedelta(days=2)
-        start_date = end_date - timedelta(days=7)
+        start_date = end_date - timedelta(days=20)
 
-        # Create the report
+        print(f"\n=== Testing full impression share report flow ===")
+        print(f"Report name: {report_name}")
+        print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+
+        # Step 1: Create the report
         report = client.create_impression_share_report(
             name=report_name,
             start_date=start_date,
@@ -401,10 +404,69 @@ class TestAppleSearchAdsIntegration:
         assert report is not None
         assert "id" in report
         assert "state" in report
-        print(f"Created impression share report: {report['id']}, state: {report['state']}")
+        print(f"Step 1 - Created report: ID={report['id']}, state={report['state']}")
 
-        # Check report status
-        report_status = client.get_impression_share_report(report["id"])
-        assert report_status is not None
-        assert "state" in report_status
-        print(f"Report status: {report_status['state']}")
+        # Step 2: Poll for completion
+        report_id = report["id"]
+        max_attempts = 24  # 2 minutes max
+        completed = False
+
+        for i in range(max_attempts):
+            report_status = client.get_impression_share_report(report_id)
+            state = report_status.get("state")
+            print(f"Step 2 - Poll attempt {i+1}: state={state}")
+
+            if state == "COMPLETED":
+                completed = True
+                break
+            elif state not in ("QUEUED", "PENDING", "PROCESSING"):
+                pytest.fail(f"Unexpected report state: {state}")
+
+            time.sleep(5)
+
+        assert completed, f"Report did not complete within {max_attempts * 5} seconds"
+
+        # Step 3: Download and parse data
+        download_uri = report_status.get("downloadUri")
+        assert download_uri is not None, "No downloadUri in completed report"
+        print(f"Step 3 - Download URI received (length: {len(download_uri)})")
+
+        df = client._download_impression_share_report(download_uri)
+
+        # Step 4: Verify the data
+        print(f"Step 4 - DataFrame shape: {df.shape}")
+        print(f"Columns: {list(df.columns)}")
+
+        # Verify expected columns exist
+        expected_columns = [
+            "date",
+            "appName",
+            "adamId",
+            "countryOrRegion",
+            "searchTerm",
+            "lowImpressionShare",
+            "highImpressionShare",
+            "rank",
+            "searchPopularity",
+        ]
+
+        for col in expected_columns:
+            assert col in df.columns, f"Missing expected column: {col}"
+
+        # Data may be empty if no impression share data exists, but structure should be correct
+        if not df.empty:
+            print(f"Sample data (first 3 rows):")
+            print(df.head(3).to_string())
+
+            # Verify data types
+            assert df["lowImpressionShare"].dtype == "float64"
+            assert df["highImpressionShare"].dtype == "float64"
+
+            # Verify impression share values are in valid range (0-1)
+            assert df["lowImpressionShare"].min() >= 0
+            assert df["highImpressionShare"].max() <= 1
+
+            print(f"\n=== SUCCESS: Full flow completed with {len(df)} rows ===")
+        else:
+            print("DataFrame is empty - no impression share data for this date range")
+            print("=== SUCCESS: Full flow completed (no data for date range) ===")
