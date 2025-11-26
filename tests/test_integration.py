@@ -156,6 +156,39 @@ class TestAppleSearchAdsIntegration:
             assert "status" in campaign
             assert "adamId" in campaign
 
+    def test_get_campaigns_with_supply_source(self, client):
+        """Test fetching campaigns and verifying supplySources field."""
+        # Ensure we have an org set
+        if not client.org_id:
+            orgs = client.get_all_organizations()
+            if orgs:
+                client.org_id = str(orgs[0]["orgId"])
+
+        # Get all campaigns first
+        all_campaigns = client.get_campaigns()
+
+        if len(all_campaigns) > 0:
+            # Verify supplySources is present
+            campaign = all_campaigns[0]
+            assert "supplySources" in campaign, "Campaign should have supplySources field"
+            print(f"Found {len(all_campaigns)} total campaigns")
+            print(f"Sample supplySources: {campaign.get('supplySources')}")
+
+            # Get unique supply sources across all campaigns
+            supply_sources = set()
+            for c in all_campaigns:
+                for ss in c.get("supplySources", []):
+                    supply_sources.add(ss)
+            print(f"Supply sources in account: {supply_sources}")
+
+            # Test filtering by each supply source
+            for ss in supply_sources:
+                filtered = client.get_campaigns(supply_source=ss)
+                print(f"  {ss}: {len(filtered)} campaigns")
+                assert all(
+                    ss in c.get("supplySources", []) for c in filtered
+                ), f"All filtered campaigns should have {ss}"
+
     @pytest.mark.slow
     def test_get_adgroups(self, client):
         """Test fetching ad groups for a campaign."""
@@ -384,9 +417,9 @@ class TestAppleSearchAdsIntegration:
         # Use a unique name with timestamp to avoid conflicts
         report_name = f"integration_test_{int(time.time())}"
 
-        # Use a date range that should have data
-        end_date = datetime.now() - timedelta(days=2)
-        start_date = end_date - timedelta(days=20)
+        # Use a single day
+        start_date = datetime(2025, 11, 24)
+        end_date = datetime(2025, 11, 24)
 
         print(f"\n=== Testing full impression share report flow ===")
         print(f"Report name: {report_name}")
@@ -398,7 +431,6 @@ class TestAppleSearchAdsIntegration:
             start_date=start_date,
             end_date=end_date,
             granularity="DAILY",
-            countries=["US"],
         )
 
         assert report is not None

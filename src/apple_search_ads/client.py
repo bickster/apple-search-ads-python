@@ -283,15 +283,25 @@ class AppleSearchAdsClient:
         response = self._make_request(url, params=params)
         return response.get("data", [])
 
-    def get_campaigns(self, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_campaigns(
+        self,
+        org_id: Optional[str] = None,
+        supply_source: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Get all campaigns for a specific organization or the default one.
 
         Args:
             org_id: Optional organization ID. If not provided, uses the default org.
+            supply_source: Optional filter by supply source type. Valid values:
+                - APPSTORE_SEARCH_RESULTS: Search results ads
+                - APPSTORE_SEARCH_TAB: Search tab ads
+                - APPSTORE_TODAY_TAB: Today tab ads
+                - APPSTORE_PRODUCT_PAGES_BROWSE: "You Might Also Like" ads
 
         Returns:
-            List of campaign dictionaries.
+            List of campaign dictionaries. Each campaign includes 'supplySources'
+            field indicating the ad placement type(s).
         """
         # Use provided org_id or get the default one
         original_org_id = None
@@ -313,15 +323,26 @@ class AppleSearchAdsClient:
             for campaign in campaigns:
                 campaign["fetched_org_id"] = self.org_id
 
+            # Filter by supply_source if specified
+            if supply_source:
+                campaigns = [c for c in campaigns if supply_source in c.get("supplySources", [])]
+
             return campaigns
         finally:
             # Restore original org_id if we changed it
             if original_org_id is not None:
                 self.org_id = original_org_id
 
-    def get_all_campaigns(self) -> List[Dict[str, Any]]:
+    def get_all_campaigns(self, supply_source: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get campaigns from all organizations.
+
+        Args:
+            supply_source: Optional filter by supply source type. Valid values:
+                - APPSTORE_SEARCH_RESULTS: Search results ads
+                - APPSTORE_SEARCH_TAB: Search tab ads
+                - APPSTORE_TODAY_TAB: Today tab ads
+                - APPSTORE_PRODUCT_PAGES_BROWSE: "You Might Also Like" ads
 
         Returns:
             List of all campaigns across all organizations.
@@ -334,7 +355,7 @@ class AppleSearchAdsClient:
             org_name = org.get("orgName", "Unknown")
 
             try:
-                campaigns = self.get_campaigns(org_id=org_id)
+                campaigns = self.get_campaigns(org_id=org_id, supply_source=supply_source)
 
                 # Add organization info to each campaign
                 for campaign in campaigns:

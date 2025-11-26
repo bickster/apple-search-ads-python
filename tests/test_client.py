@@ -348,6 +348,79 @@ class TestAppleSearchAdsClient:
         assert campaigns[1]["name"] == "Campaign 2"
 
     @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_campaigns_with_supply_sources(self, mock_make_request, client):
+        """Test that campaigns include supplySources field."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": [
+                {
+                    "id": "1",
+                    "name": "Search Campaign",
+                    "supplySources": ["APPSTORE_SEARCH_RESULTS"],
+                },
+                {
+                    "id": "2",
+                    "name": "Today Tab Campaign",
+                    "supplySources": ["APPSTORE_TODAY_TAB"],
+                },
+            ]
+        }
+
+        campaigns = client.get_campaigns()
+
+        assert len(campaigns) == 2
+        assert campaigns[0]["supplySources"] == ["APPSTORE_SEARCH_RESULTS"]
+        assert campaigns[1]["supplySources"] == ["APPSTORE_TODAY_TAB"]
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_campaigns_filter_by_supply_source(self, mock_make_request, client):
+        """Test filtering campaigns by supply_source."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": [
+                {
+                    "id": "1",
+                    "name": "Search Campaign",
+                    "supplySources": ["APPSTORE_SEARCH_RESULTS"],
+                },
+                {
+                    "id": "2",
+                    "name": "Today Tab Campaign",
+                    "supplySources": ["APPSTORE_TODAY_TAB"],
+                },
+                {
+                    "id": "3",
+                    "name": "Search Tab Campaign",
+                    "supplySources": ["APPSTORE_SEARCH_TAB"],
+                },
+            ]
+        }
+
+        # Filter for search results campaigns only
+        campaigns = client.get_campaigns(supply_source="APPSTORE_SEARCH_RESULTS")
+
+        assert len(campaigns) == 1
+        assert campaigns[0]["name"] == "Search Campaign"
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_campaigns_filter_no_match(self, mock_make_request, client):
+        """Test filtering campaigns when no campaigns match the supply_source."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": [
+                {
+                    "id": "1",
+                    "name": "Search Campaign",
+                    "supplySources": ["APPSTORE_SEARCH_RESULTS"],
+                },
+            ]
+        }
+
+        campaigns = client.get_campaigns(supply_source="APPSTORE_TODAY_TAB")
+
+        assert len(campaigns) == 0
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_adgroups(self, mock_make_request, client):
         """Test fetching ad groups for a campaign."""
         client.org_id = "123"

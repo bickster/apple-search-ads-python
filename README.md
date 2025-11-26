@@ -304,8 +304,24 @@ AppleSearchAdsClient(
 
 #### Campaign Management
 
+- `get_campaigns(org_id=None, supply_source=None)` - Get campaigns with optional filtering
+- `get_all_campaigns(supply_source=None)` - Get campaigns from all organizations
 - `get_campaigns_with_details(fetch_all_orgs=True)` - Get campaigns with app details
 - `get_adgroups(campaign_id)` - Get ad groups for a specific campaign
+
+**Supply Source Types** (campaign ad placements):
+- `APPSTORE_SEARCH_RESULTS` - Search results ads
+- `APPSTORE_SEARCH_TAB` - Search tab ads
+- `APPSTORE_TODAY_TAB` - Today tab ads
+- `APPSTORE_PRODUCT_PAGES_BROWSE` - "You Might Also Like" ads
+
+```python
+# Get only search results campaigns
+search_campaigns = client.get_campaigns(supply_source="APPSTORE_SEARCH_RESULTS")
+
+# Get today tab campaigns from all orgs
+today_campaigns = client.get_all_campaigns(supply_source="APPSTORE_TODAY_TAB")
+```
 
 ## DataFrame Output
 
