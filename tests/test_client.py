@@ -517,7 +517,12 @@ class TestAppleSearchAdsClient:
                                     "impressions": 1000,
                                     "taps": 50,
                                     "totalInstalls": 10,
+                                    "totalNewDownloads": 6,
+                                    "totalRedownloads": 4,
+                                    "latOnInstalls": 8,
+                                    "latOffInstalls": 2,
                                     "localSpend": {"amount": 100.0, "currency": "USD"},
+                                    "avgCPM": {"amount": 5.0, "currency": "USD"},
                                 }
                             ],
                         }
@@ -536,6 +541,12 @@ class TestAppleSearchAdsClient:
         assert df.iloc[0]["campaign_name"] == "Test Campaign"
         assert df.iloc[0]["spend"] == 100.0
         assert df.iloc[0]["adam_id"] == "123456"
+        # Verify new metrics fields
+        assert df.iloc[0]["new_downloads"] == 6
+        assert df.iloc[0]["redownloads"] == 4
+        assert df.iloc[0]["lat_on_installs"] == 8
+        assert df.iloc[0]["lat_off_installs"] == 2
+        assert df.iloc[0]["avg_cpm"] == 5.0
 
     @patch.object(AppleSearchAdsClient, "get_all_organizations")
     @patch.object(AppleSearchAdsClient, "get_campaign_report")

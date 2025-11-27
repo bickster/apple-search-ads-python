@@ -421,7 +421,7 @@ class TestAppleSearchAdsIntegration:
         start_date = datetime(2025, 11, 24)
         end_date = datetime(2025, 11, 24)
 
-        print(f"\n=== Testing full impression share report flow ===")
+        print("\n=== Testing full impression share report flow ===")
         print(f"Report name: {report_name}")
         print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
 
@@ -487,7 +487,7 @@ class TestAppleSearchAdsIntegration:
 
         # Data may be empty if no impression share data exists, but structure should be correct
         if not df.empty:
-            print(f"Sample data (first 3 rows):")
+            print("Sample data (first 3 rows):")
             print(df.head(3).to_string())
 
             # Verify data types

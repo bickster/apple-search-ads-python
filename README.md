@@ -323,6 +323,204 @@ search_campaigns = client.get_campaigns(supply_source="APPSTORE_SEARCH_RESULTS")
 today_campaigns = client.get_all_campaigns(supply_source="APPSTORE_TODAY_TAB")
 ```
 
+## Data Structures
+
+### Organization Fields
+
+The `get_all_organizations()` method returns organization objects with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `orgId` | int | Unique organization identifier |
+| `orgName` | str | Organization name |
+| `displayName` | str | Display name |
+| `parentOrgId` | int | Parent organization ID (if applicable) |
+| `currency` | str | Account currency code |
+| `timeZone` | str | Account timezone |
+| `paymentModel` | str | Payment model: `PAYG`, `LOC` |
+| `roleNames` | list | User roles in this organization |
+
+### Campaign Fields
+
+The `get_campaigns()` method returns campaign objects with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | int | Unique campaign identifier |
+| `orgId` | int | Organization identifier |
+| `name` | str | Campaign name |
+| `adamId` | int | App Store app identifier |
+| `budgetAmount` | dict | Campaign budget (`amount`, `currency`) |
+| `dailyBudgetAmount` | dict | Daily budget limit (`amount`, `currency`) |
+| `budgetOrders` | list | Associated budget orders |
+| `status` | str | User-controlled status: `ENABLED`, `PAUSED` |
+| `servingStatus` | str | System status: `RUNNING`, `NOT_RUNNING` |
+| `servingStateReasons` | list | Reasons if not serving |
+| `displayStatus` | str | Combined display status |
+| `adChannelType` | str | Ad channel: `SEARCH`, `DISPLAY` |
+| `supplySources` | list | Ad placements (see Supply Source Types) |
+| `locInvoiceDetails` | dict | Invoice details for LOC accounts |
+| `paymentModel` | str | Payment model: `PAYG`, `LOC` |
+| `billingEvent` | str | Billing event type |
+| `countriesOrRegions` | list | Targeted countries/regions |
+| `countryOrRegionServingStateReasons` | dict | Per-country serving state reasons |
+| `modificationTime` | str | Last modification timestamp |
+| `startTime` | str | Campaign start time |
+| `endTime` | str | Campaign end time (if set) |
+| `deleted` | bool | Soft-delete indicator |
+
+### Ad Group Fields
+
+The `get_adgroups()` method returns ad group objects with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | int | Unique ad group identifier |
+| `campaignId` | int | Parent campaign identifier |
+| `orgId` | int | Organization identifier |
+| `name` | str | Ad group name |
+| `status` | str | User-controlled status: `ENABLED`, `PAUSED` |
+| `servingStatus` | str | System status: `RUNNING`, `NOT_RUNNING` |
+| `servingStateReasons` | list | Reasons if not serving |
+| `displayStatus` | str | Combined display status |
+| `deleted` | bool | Soft-delete indicator |
+| `pricingModel` | str | Pricing model: `CPC`, `CPM` |
+| `defaultBidAmount` | dict | Default bid (`amount`, `currency`) |
+| `cpaGoal` | dict | Cost-per-acquisition goal (if set) |
+| `automatedKeywordsOptIn` | bool | Search Match enabled |
+| `startTime` | str | Ad group start time |
+| `endTime` | str | Ad group end time (if set) |
+| `creationTime` | str | Creation timestamp |
+| `modificationTime` | str | Last modification timestamp |
+| `targetingDimensions` | dict | Targeting criteria (age, gender, location, device, etc.) |
+
+### Keyword Report Fields
+
+The `get_keyword_report()` method returns a DataFrame with performance metrics:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | str | Report date |
+| `campaign_id` | str | Campaign identifier |
+| `adgroup_id` | int | Ad group identifier |
+| `keyword_id` | int | Keyword identifier |
+| `keyword` | str | Keyword text |
+| `keyword_status` | str | Status: `ACTIVE`, `PAUSED` |
+| `match_type` | str | Match type: `EXACT`, `BROAD` |
+| `bid_amount` | float | Keyword bid amount |
+| `impressions` | int | Number of impressions |
+| `taps` | int | Number of taps (clicks) |
+| `installs` | int | Number of installs |
+| `new_downloads` | int | New app downloads |
+| `redownloads` | int | App redownloads |
+| `lat_on_installs` | int | LAT-on installs |
+| `lat_off_installs` | int | LAT-off installs |
+| `spend` | float | Total spend |
+| `currency` | str | Currency code |
+| `avg_cpa` | float | Average cost per acquisition |
+| `avg_cpt` | float | Average cost per tap |
+| `avg_cpm` | float | Average cost per thousand impressions |
+| `ttr` | float | Tap-through rate |
+| `conversion_rate` | float | Conversion rate (installs/taps) |
+
+### Campaign Report Fields
+
+The `get_campaign_report()` method returns a DataFrame with performance metrics:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | str | Report date |
+| `campaign_id` | int | Campaign identifier |
+| `campaign_name` | str | Campaign name |
+| `campaign_status` | str | Campaign status |
+| `adam_id` | str | App Store app identifier |
+| `app_name` | str | App name |
+| `impressions` | int | Number of impressions |
+| `taps` | int | Number of taps (clicks) |
+| `installs` | int | Number of installs |
+| `new_downloads` | int | New app downloads |
+| `redownloads` | int | App redownloads |
+| `lat_on_installs` | int | LAT-on installs |
+| `lat_off_installs` | int | LAT-off installs |
+| `spend` | float | Total spend |
+| `currency` | str | Currency code |
+| `avg_cpa` | float | Average cost per acquisition |
+| `avg_cpt` | float | Average cost per tap |
+| `avg_cpm` | float | Average cost per thousand impressions |
+| `ttr` | float | Tap-through rate |
+| `conversion_rate` | float | Conversion rate (installs/taps) |
+
+### Ad Group Report Fields
+
+The `get_adgroup_report()` method returns a DataFrame with performance metrics:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | str | Report date |
+| `campaign_id` | str | Campaign identifier |
+| `adgroup_id` | int | Ad group identifier |
+| `adgroup_name` | str | Ad group name |
+| `adgroup_status` | str | Ad group status |
+| `impressions` | int | Number of impressions |
+| `taps` | int | Number of taps (clicks) |
+| `installs` | int | Number of installs |
+| `new_downloads` | int | New app downloads |
+| `redownloads` | int | App redownloads |
+| `lat_on_installs` | int | LAT-on installs |
+| `lat_off_installs` | int | LAT-off installs |
+| `spend` | float | Total spend |
+| `currency` | str | Currency code |
+| `avg_cpa` | float | Average cost per acquisition |
+| `avg_cpt` | float | Average cost per tap |
+| `avg_cpm` | float | Average cost per thousand impressions |
+| `ttr` | float | Tap-through rate |
+| `conversion_rate` | float | Conversion rate (installs/taps) |
+
+### Search Term Report Fields
+
+The `get_search_term_report()` method returns a DataFrame with search term performance:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | str | Report date |
+| `campaign_id` | str | Campaign identifier |
+| `adgroup_id` | int | Ad group identifier |
+| `keyword_id` | int | Matched keyword identifier |
+| `keyword` | str | Matched keyword text |
+| `search_term` | str | Actual search term entered by user |
+| `search_term_source` | str | Source: `AUTO` (Search Match) or `TARGETED` |
+| `match_type` | str | Match type: `EXACT`, `BROAD`, `SEARCH_MATCH` |
+| `impressions` | int | Number of impressions |
+| `taps` | int | Number of taps (clicks) |
+| `installs` | int | Number of installs |
+| `new_downloads` | int | New app downloads |
+| `redownloads` | int | App redownloads |
+| `lat_on_installs` | int | LAT-on installs |
+| `lat_off_installs` | int | LAT-off installs |
+| `spend` | float | Total spend |
+| `currency` | str | Currency code |
+| `avg_cpa` | float | Average cost per acquisition |
+| `avg_cpt` | float | Average cost per tap |
+| `avg_cpm` | float | Average cost per thousand impressions |
+| `ttr` | float | Tap-through rate |
+| `conversion_rate` | float | Conversion rate (installs/taps) |
+
+### Impression Share Report Fields
+
+The `get_impression_share_data()` method returns a DataFrame with impression share data:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `date` | str | Report date |
+| `adamId` | str | App Store app identifier |
+| `appName` | str | App name |
+| `countryOrRegion` | str | Country or region code |
+| `searchTerm` | str | Search term |
+| `lowImpressionShare` | float | Low end of impression share range (0-1) |
+| `highImpressionShare` | float | High end of impression share range (0-1) |
+| `rank` | int | Search popularity rank |
+| `searchPopularity` | int | Search popularity score |
+
 ## DataFrame Output
 
 All reporting methods return pandas DataFrames for easy data manipulation:
