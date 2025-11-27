@@ -638,9 +638,11 @@ class AppleSearchAdsClient:
                     )
                     data.append(entry)
             else:
-                metrics = row.get("metrics", {})
-                entry = {"date": metadata.get("date")}
-                entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, True))
+                # Search term reports return 'total' instead of 'metrics'
+                # and don't support granularity, so use start_date as the date
+                metrics = row.get("total", row.get("metrics", {}))
+                entry = {"date": start_date.strftime("%Y-%m-%d")}
+                entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, False))
                 data.append(entry)
 
         return pd.DataFrame(data)
@@ -703,9 +705,11 @@ class AppleSearchAdsClient:
                     )
                     data.append(entry)
             else:
-                metrics = row.get("metrics", {})
-                entry = {"date": metadata.get("date")}
-                entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, True))
+                # Search term reports return 'total' instead of 'metrics'
+                # and don't support granularity, so use start_date as the date
+                metrics = row.get("total", row.get("metrics", {}))
+                entry = {"date": start_date.strftime("%Y-%m-%d")}
+                entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, False))
                 data.append(entry)
 
         return pd.DataFrame(data)
