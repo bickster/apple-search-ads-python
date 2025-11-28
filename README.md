@@ -186,6 +186,7 @@ df = client.get_impression_share_data(
     granularity="DAILY",
     countries=["US", "AU"],  # Optional: filter by countries
     adam_ids=["1234567890"],  # Optional: filter by app IDs
+    time_zone="ORTZ",  # Optional: use org timezone
     poll_interval=5,  # Seconds between status checks
     max_wait=300  # Max seconds to wait for completion
 )
@@ -308,9 +309,9 @@ report = client.get_campaign_report(start_date, end_date, time_zone="ORTZ")
 
 #### Impression Share Reports
 
-- `create_impression_share_report(name, start_date, end_date, ...)` - Create an async impression share report
+- `create_impression_share_report(name, start_date, end_date, granularity="DAILY", countries=None, adam_ids=None, time_zone=None)` - Create an async impression share report
 - `get_impression_share_report(report_id)` - Get report status and info
-- `get_impression_share_data(name, start_date, end_date, ...)` - Convenience method: create, poll, and download
+- `get_impression_share_data(name, start_date, end_date, granularity="DAILY", countries=None, adam_ids=None, time_zone=None, poll_interval=5, max_wait=300)` - Convenience method: create, poll, and download
 
 #### Campaign Management
 

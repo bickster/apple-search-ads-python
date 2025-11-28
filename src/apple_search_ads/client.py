@@ -998,6 +998,7 @@ class AppleSearchAdsClient:
         granularity: str = "DAILY",
         countries: Optional[List[str]] = None,
         adam_ids: Optional[List[str]] = None,
+        time_zone: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create an impression share report request.
@@ -1012,6 +1013,7 @@ class AppleSearchAdsClient:
             granularity: DAILY or WEEKLY
             countries: Optional list of country codes to filter (e.g., ["US", "AU"])
             adam_ids: Optional list of app Adam IDs to filter
+            time_zone: Optional timezone (e.g., "ORTZ" for org timezone, "UTC")
 
         Returns:
             Dict with report info including 'id', 'state', 'downloadUri', etc.
@@ -1034,6 +1036,9 @@ class AppleSearchAdsClient:
             "endTime": end_date.strftime("%Y-%m-%d"),
             "granularity": granularity,
         }
+
+        if time_zone:
+            request_data["timeZone"] = time_zone
 
         # Build selector conditions
         conditions = []
@@ -1100,6 +1105,7 @@ class AppleSearchAdsClient:
         granularity: str = "DAILY",
         countries: Optional[List[str]] = None,
         adam_ids: Optional[List[str]] = None,
+        time_zone: Optional[str] = None,
         poll_interval: int = 5,
         max_wait: int = 300,
     ) -> pd.DataFrame:
@@ -1118,6 +1124,7 @@ class AppleSearchAdsClient:
             granularity: DAILY or WEEKLY
             countries: Optional list of country codes to filter (e.g., ["US", "AU"])
             adam_ids: Optional list of app Adam IDs to filter
+            time_zone: Optional timezone (e.g., "ORTZ" for org timezone, "UTC")
             poll_interval: Seconds between status checks (default: 5)
             max_wait: Maximum seconds to wait for report (default: 300)
 
@@ -1139,6 +1146,7 @@ class AppleSearchAdsClient:
             granularity=granularity,
             countries=countries,
             adam_ids=adam_ids,
+            time_zone=time_zone,
         )
 
         if not report or "id" not in report:
