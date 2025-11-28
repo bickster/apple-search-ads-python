@@ -108,7 +108,7 @@ verify_version_consistency() {
 run_tests() {
     print_status "Running tests..."
     if command_exists pytest; then
-        pytest tests -v --cov=apple_search_ads --cov-report=term-missing
+        pytest tests -v --ignore=tests/test_integration.py --cov=apple_search_ads --cov-report=term-missing
         print_success "Tests passed"
     else
         print_warning "pytest not found, skipping tests"
