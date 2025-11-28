@@ -414,6 +414,7 @@ class AppleSearchAdsClient:
         start_date: Union[datetime, str],
         end_date: Union[datetime, str],
         granularity: str = "DAILY",
+        time_zone: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         Get campaign performance report.
@@ -422,6 +423,7 @@ class AppleSearchAdsClient:
             start_date: Start date for the report (datetime or YYYY-MM-DD string)
             end_date: End date for the report (datetime or YYYY-MM-DD string)
             granularity: DAILY, WEEKLY, or MONTHLY
+            time_zone: Optional timezone (e.g., "ORTZ" for org timezone, "UTC")
 
         Returns:
             DataFrame with campaign performance metrics.
@@ -433,7 +435,7 @@ class AppleSearchAdsClient:
         end_date = self._parse_date_param(end_date)
 
         url = f"{self.BASE_URL}/reports/campaigns"
-        request_data = self._build_report_request(start_date, end_date, granularity)
+        request_data = self._build_report_request(start_date, end_date, granularity, time_zone)
         response = self._make_request(url, method="POST", json_data=request_data)
         rows = self._extract_rows_from_response(response)
 
@@ -475,6 +477,7 @@ class AppleSearchAdsClient:
         start_date: Union[datetime, str],
         end_date: Union[datetime, str],
         granularity: str = "DAILY",
+        time_zone: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         Get ad group performance report for a specific campaign.
@@ -484,6 +487,7 @@ class AppleSearchAdsClient:
             start_date: Start date for the report (datetime or YYYY-MM-DD string)
             end_date: End date for the report (datetime or YYYY-MM-DD string)
             granularity: DAILY, WEEKLY, or MONTHLY
+            time_zone: Optional timezone (e.g., "ORTZ" for org timezone, "UTC")
 
         Returns:
             DataFrame with ad group performance metrics.
@@ -495,7 +499,7 @@ class AppleSearchAdsClient:
         end_date = self._parse_date_param(end_date)
 
         url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/adgroups"
-        request_data = self._build_report_request(start_date, end_date, granularity)
+        request_data = self._build_report_request(start_date, end_date, granularity, time_zone)
         response = self._make_request(url, method="POST", json_data=request_data)
         rows = self._extract_rows_from_response(response)
 
@@ -541,6 +545,7 @@ class AppleSearchAdsClient:
         start_date: Union[datetime, str],
         end_date: Union[datetime, str],
         granularity: str = "DAILY",
+        time_zone: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         Get keyword performance report for a specific campaign.
@@ -550,6 +555,7 @@ class AppleSearchAdsClient:
             start_date: Start date for the report (datetime or YYYY-MM-DD string)
             end_date: End date for the report (datetime or YYYY-MM-DD string)
             granularity: DAILY, WEEKLY, or MONTHLY
+            time_zone: Optional timezone (e.g., "ORTZ" for org timezone, "UTC")
 
         Returns:
             DataFrame with keyword performance metrics.
@@ -561,7 +567,7 @@ class AppleSearchAdsClient:
         end_date = self._parse_date_param(end_date)
 
         url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/keywords"
-        request_data = self._build_report_request(start_date, end_date, granularity)
+        request_data = self._build_report_request(start_date, end_date, granularity, time_zone)
         response = self._make_request(url, method="POST", json_data=request_data)
         rows = self._extract_rows_from_response(response)
 
@@ -585,18 +591,29 @@ class AppleSearchAdsClient:
         return pd.DataFrame(data)
 
     def _parse_search_term_row(
-        self, row: Dict[str, Any], metadata: Dict[str, Any], campaign_id: str, is_legacy: bool
+        self,
+        row: Dict[str, Any],
+        metadata: Dict[str, Any],
+        campaign_id: str,
+        is_legacy: bool,
+        is_low_volume: bool = False,
     ) -> Dict[str, Any]:
         """Parse a single search term row into a flat dict."""
+        # Get search term, mapping null to "(Low volume terms)" for aggregated data
+        search_term = metadata.get("searchTermText")
+        if search_term is None and is_low_volume:
+            search_term = "(Low volume terms)"
+
         base = {
             "campaign_id": campaign_id,
             "adgroup_id": metadata.get("adGroupId"),
             "keyword_id": metadata.get("keywordId"),
             "keyword": metadata.get("keyword"),
-            "search_term": metadata.get("searchTermText"),
+            "search_term": search_term,
             "search_term_source": metadata.get("searchTermSource"),
             "match_type": metadata.get("matchType"),
             "country_or_region": metadata.get("countryOrRegion"),
+            "is_low_volume": is_low_volume,
         }
         base.update(self._parse_metrics(row, is_legacy))
         return base
@@ -645,11 +662,14 @@ class AppleSearchAdsClient:
         data = []
         for row in rows:
             metadata = row.get("metadata", {})
+            is_low_volume = row.get("other", False)
             if "granularity" in row:
                 for day_data in row["granularity"]:
                     entry = {"date": day_data.get("date")}
                     entry.update(
-                        self._parse_search_term_row(day_data, metadata, campaign_id, False)
+                        self._parse_search_term_row(
+                            day_data, metadata, campaign_id, False, is_low_volume
+                        )
                     )
                     data.append(entry)
             else:
@@ -658,7 +678,11 @@ class AppleSearchAdsClient:
                 metrics = row.get("total", row.get("metrics", {}))
                 report_date = metrics.get("date", start_date.strftime("%Y-%m-%d"))
                 entry = {"date": report_date}
-                entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, False))
+                entry.update(
+                    self._parse_search_term_row(
+                        metrics, metadata, campaign_id, False, is_low_volume
+                    )
+                )
                 data.append(entry)
 
         return pd.DataFrame(data)
@@ -713,11 +737,14 @@ class AppleSearchAdsClient:
         data = []
         for row in rows:
             metadata = row.get("metadata", {})
+            is_low_volume = row.get("other", False)
             if "granularity" in row:
                 for day_data in row["granularity"]:
                     entry = {"date": day_data.get("date")}
                     entry.update(
-                        self._parse_search_term_row(day_data, metadata, campaign_id, False)
+                        self._parse_search_term_row(
+                            day_data, metadata, campaign_id, False, is_low_volume
+                        )
                     )
                     data.append(entry)
             else:
@@ -726,7 +753,11 @@ class AppleSearchAdsClient:
                 metrics = row.get("total", row.get("metrics", {}))
                 report_date = metrics.get("date", start_date.strftime("%Y-%m-%d"))
                 entry = {"date": report_date}
-                entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, False))
+                entry.update(
+                    self._parse_search_term_row(
+                        metrics, metadata, campaign_id, False, is_low_volume
+                    )
+                )
                 data.append(entry)
 
         return pd.DataFrame(data)

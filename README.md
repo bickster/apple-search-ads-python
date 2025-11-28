@@ -287,14 +287,24 @@ AppleSearchAdsClient(
 
 #### Reporting
 
-- `get_campaign_report(start_date, end_date, granularity="DAILY")` - Get campaign performance report
-- `get_adgroup_report(campaign_id, start_date, end_date, granularity="DAILY")` - Get ad group performance report for a campaign
-- `get_keyword_report(campaign_id, start_date, end_date, granularity="DAILY")` - Get keyword performance report for a campaign
-- `get_search_term_report(campaign_id, start_date, end_date)` - Get search term performance report for a campaign
-- `get_adgroup_search_term_report(campaign_id, adgroup_id, start_date, end_date)` - Get search term performance report for an ad group
+- `get_campaign_report(start_date, end_date, granularity="DAILY", time_zone=None)` - Get campaign performance report
+- `get_adgroup_report(campaign_id, start_date, end_date, granularity="DAILY", time_zone=None)` - Get ad group performance report for a campaign
+- `get_keyword_report(campaign_id, start_date, end_date, granularity="DAILY", time_zone=None)` - Get keyword performance report for a campaign
+- `get_search_term_report(campaign_id, start_date, end_date)` - Get search term performance report (uses ORTZ)
+- `get_adgroup_search_term_report(campaign_id, adgroup_id, start_date, end_date)` - Get search term performance report for an ad group (uses ORTZ)
 - `get_daily_spend(days=30, fetch_all_orgs=True)` - Get daily spend for the last N days
 - `get_daily_spend_with_dates(start_date, end_date, fetch_all_orgs=True)` - Get daily spend for date range
 - `get_daily_spend_by_app(start_date, end_date, fetch_all_orgs=True)` - Get spend grouped by app
+
+**Timezone Options:**
+- `None` (default) - Uses UTC
+- `"ORTZ"` - Organization Reference Time Zone (matches Apple Ads UI)
+- `"UTC"` - Coordinated Universal Time
+
+```python
+# Use organization timezone for consistent reporting with Apple Ads UI
+report = client.get_campaign_report(start_date, end_date, time_zone="ORTZ")
+```
 
 #### Impression Share Reports
 
@@ -506,12 +516,13 @@ The `get_search_term_report()` method returns a DataFrame with search term perfo
 | `date` | str | Report date |
 | `campaign_id` | str | Campaign identifier |
 | `adgroup_id` | int | Ad group identifier |
-| `keyword_id` | int | Matched keyword identifier |
+| `keyword_id` | int | Matched keyword identifier (important for deduplication) |
 | `keyword` | str | Matched keyword text |
-| `search_term` | str | Actual search term entered by user |
+| `search_term` | str | Actual search term, or `"(Low volume terms)"` for aggregated data |
 | `search_term_source` | str | Source: `AUTO` (Search Match) or `TARGETED` |
 | `match_type` | str | Match type: `EXACT`, `BROAD`, `SEARCH_MATCH` |
 | `country_or_region` | str | Country or region code |
+| `is_low_volume` | bool | True if this row contains aggregated low-volume search terms |
 | `impressions` | int | Number of impressions |
 | `taps` | int | Number of taps (clicks) |
 | `installs` | int | Total installs |
@@ -533,6 +544,11 @@ The `get_search_term_report()` method returns a DataFrame with search term perfo
 | `ttr` | float | Tap-through rate |
 | `conversion_rate` | float | Conversion rate (total installs/taps) |
 | `tap_install_rate` | float | Tap-through install rate |
+
+**Notes on search term data:**
+
+- **Low volume terms**: Search terms with fewer than 10 impressions are aggregated by Apple. These rows have `is_low_volume=True` and `search_term="(Low volume terms)"`.
+- **Deduplication**: The same search term can appear multiple times if it matched different keywords in the same ad group. Use the combination of `keyword_id` + `search_term` + `date` as a unique key when storing data.
 
 ### Impression Share Report Fields
 
