@@ -233,6 +233,12 @@ class AppleSearchAdsClient:
                 "redownloads": day_data.get("redownloads", 0),
                 "lat_on_installs": day_data.get("latOnInstalls", 0),
                 "lat_off_installs": day_data.get("latOffInstalls", 0),
+                "tap_installs": day_data.get("tapInstalls", 0),
+                "view_installs": day_data.get("viewInstalls", 0),
+                "tap_new_downloads": day_data.get("tapNewDownloads", 0),
+                "tap_redownloads": day_data.get("tapRedownloads", 0),
+                "view_new_downloads": day_data.get("viewNewDownloads", 0),
+                "view_redownloads": day_data.get("viewRedownloads", 0),
                 "spend": float((day_data.get("localSpend") or {}).get("amount", 0)),
                 "currency": (day_data.get("localSpend") or {}).get("currency", "USD"),
                 "avg_cpa": float((day_data.get("avgCPA") or {}).get("amount", 0)),
@@ -240,6 +246,7 @@ class AppleSearchAdsClient:
                 "avg_cpm": float((day_data.get("avgCPM") or {}).get("amount", 0)),
                 "ttr": day_data.get("ttr", 0),
                 "conversion_rate": day_data.get("conversionRate", 0),
+                "tap_install_rate": day_data.get("tapInstallRate", 0),
             }
         return {
             "impressions": day_data.get("impressions", 0),
@@ -249,6 +256,12 @@ class AppleSearchAdsClient:
             "redownloads": day_data.get("totalRedownloads", 0),
             "lat_on_installs": day_data.get("latOnInstalls", 0),
             "lat_off_installs": day_data.get("latOffInstalls", 0),
+            "tap_installs": day_data.get("tapInstalls", 0),
+            "view_installs": day_data.get("viewInstalls", 0),
+            "tap_new_downloads": day_data.get("tapNewDownloads", 0),
+            "tap_redownloads": day_data.get("tapRedownloads", 0),
+            "view_new_downloads": day_data.get("viewNewDownloads", 0),
+            "view_redownloads": day_data.get("viewRedownloads", 0),
             "spend": float((day_data.get("localSpend") or {}).get("amount", 0)),
             "currency": (day_data.get("localSpend") or {}).get("currency", "USD"),
             "avg_cpa": float((day_data.get("totalAvgCPI") or {}).get("amount", 0)),
@@ -256,6 +269,7 @@ class AppleSearchAdsClient:
             "avg_cpm": float((day_data.get("avgCPM") or {}).get("amount", 0)),
             "ttr": day_data.get("ttr", 0),
             "conversion_rate": day_data.get("totalInstallRate", 0),
+            "tap_install_rate": day_data.get("tapInstallRate", 0),
         }
 
     def get_all_organizations(self) -> List[Dict[str, Any]]:
@@ -582,6 +596,7 @@ class AppleSearchAdsClient:
             "search_term": metadata.get("searchTermText"),
             "search_term_source": metadata.get("searchTermSource"),
             "match_type": metadata.get("matchType"),
+            "country_or_region": metadata.get("countryOrRegion"),
         }
         base.update(self._parse_metrics(row, is_legacy))
         return base
@@ -639,9 +654,10 @@ class AppleSearchAdsClient:
                     data.append(entry)
             else:
                 # Search term reports return 'total' instead of 'metrics'
-                # and don't support granularity, so use start_date as the date
+                # Get date from total if available, otherwise use start_date
                 metrics = row.get("total", row.get("metrics", {}))
-                entry = {"date": start_date.strftime("%Y-%m-%d")}
+                report_date = metrics.get("date", start_date.strftime("%Y-%m-%d"))
+                entry = {"date": report_date}
                 entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, False))
                 data.append(entry)
 
@@ -706,9 +722,10 @@ class AppleSearchAdsClient:
                     data.append(entry)
             else:
                 # Search term reports return 'total' instead of 'metrics'
-                # and don't support granularity, so use start_date as the date
+                # Get date from total if available, otherwise use start_date
                 metrics = row.get("total", row.get("metrics", {}))
-                entry = {"date": start_date.strftime("%Y-%m-%d")}
+                report_date = metrics.get("date", start_date.strftime("%Y-%m-%d"))
+                entry = {"date": report_date}
                 entry.update(self._parse_search_term_row(metrics, metadata, campaign_id, False))
                 data.append(entry)
 

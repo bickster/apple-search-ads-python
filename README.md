@@ -410,18 +410,25 @@ The `get_keyword_report()` method returns a DataFrame with performance metrics:
 | `bid_amount` | float | Keyword bid amount |
 | `impressions` | int | Number of impressions |
 | `taps` | int | Number of taps (clicks) |
-| `installs` | int | Number of installs |
-| `new_downloads` | int | New app downloads |
-| `redownloads` | int | App redownloads |
+| `installs` | int | Total installs |
+| `new_downloads` | int | Total new app downloads |
+| `redownloads` | int | Total app redownloads |
 | `lat_on_installs` | int | LAT-on installs |
 | `lat_off_installs` | int | LAT-off installs |
+| `tap_installs` | int | Tap-through installs |
+| `view_installs` | int | View-through installs |
+| `tap_new_downloads` | int | Tap-through new downloads |
+| `tap_redownloads` | int | Tap-through redownloads |
+| `view_new_downloads` | int | View-through new downloads |
+| `view_redownloads` | int | View-through redownloads |
 | `spend` | float | Total spend |
 | `currency` | str | Currency code |
 | `avg_cpa` | float | Average cost per acquisition |
 | `avg_cpt` | float | Average cost per tap |
 | `avg_cpm` | float | Average cost per thousand impressions |
 | `ttr` | float | Tap-through rate |
-| `conversion_rate` | float | Conversion rate (installs/taps) |
+| `conversion_rate` | float | Conversion rate (total installs/taps) |
+| `tap_install_rate` | float | Tap-through install rate |
 
 ### Campaign Report Fields
 
@@ -437,18 +444,25 @@ The `get_campaign_report()` method returns a DataFrame with performance metrics:
 | `app_name` | str | App name |
 | `impressions` | int | Number of impressions |
 | `taps` | int | Number of taps (clicks) |
-| `installs` | int | Number of installs |
-| `new_downloads` | int | New app downloads |
-| `redownloads` | int | App redownloads |
+| `installs` | int | Total installs |
+| `new_downloads` | int | Total new app downloads |
+| `redownloads` | int | Total app redownloads |
 | `lat_on_installs` | int | LAT-on installs |
 | `lat_off_installs` | int | LAT-off installs |
+| `tap_installs` | int | Tap-through installs |
+| `view_installs` | int | View-through installs |
+| `tap_new_downloads` | int | Tap-through new downloads |
+| `tap_redownloads` | int | Tap-through redownloads |
+| `view_new_downloads` | int | View-through new downloads |
+| `view_redownloads` | int | View-through redownloads |
 | `spend` | float | Total spend |
 | `currency` | str | Currency code |
 | `avg_cpa` | float | Average cost per acquisition |
 | `avg_cpt` | float | Average cost per tap |
 | `avg_cpm` | float | Average cost per thousand impressions |
 | `ttr` | float | Tap-through rate |
-| `conversion_rate` | float | Conversion rate (installs/taps) |
+| `conversion_rate` | float | Conversion rate (total installs/taps) |
+| `tap_install_rate` | float | Tap-through install rate |
 
 ### Ad Group Report Fields
 
@@ -463,18 +477,25 @@ The `get_adgroup_report()` method returns a DataFrame with performance metrics:
 | `adgroup_status` | str | Ad group status |
 | `impressions` | int | Number of impressions |
 | `taps` | int | Number of taps (clicks) |
-| `installs` | int | Number of installs |
-| `new_downloads` | int | New app downloads |
-| `redownloads` | int | App redownloads |
+| `installs` | int | Total installs |
+| `new_downloads` | int | Total new app downloads |
+| `redownloads` | int | Total app redownloads |
 | `lat_on_installs` | int | LAT-on installs |
 | `lat_off_installs` | int | LAT-off installs |
+| `tap_installs` | int | Tap-through installs |
+| `view_installs` | int | View-through installs |
+| `tap_new_downloads` | int | Tap-through new downloads |
+| `tap_redownloads` | int | Tap-through redownloads |
+| `view_new_downloads` | int | View-through new downloads |
+| `view_redownloads` | int | View-through redownloads |
 | `spend` | float | Total spend |
 | `currency` | str | Currency code |
 | `avg_cpa` | float | Average cost per acquisition |
 | `avg_cpt` | float | Average cost per tap |
 | `avg_cpm` | float | Average cost per thousand impressions |
 | `ttr` | float | Tap-through rate |
-| `conversion_rate` | float | Conversion rate (installs/taps) |
+| `conversion_rate` | float | Conversion rate (total installs/taps) |
+| `tap_install_rate` | float | Tap-through install rate |
 
 ### Search Term Report Fields
 
@@ -490,20 +511,28 @@ The `get_search_term_report()` method returns a DataFrame with search term perfo
 | `search_term` | str | Actual search term entered by user |
 | `search_term_source` | str | Source: `AUTO` (Search Match) or `TARGETED` |
 | `match_type` | str | Match type: `EXACT`, `BROAD`, `SEARCH_MATCH` |
+| `country_or_region` | str | Country or region code |
 | `impressions` | int | Number of impressions |
 | `taps` | int | Number of taps (clicks) |
-| `installs` | int | Number of installs |
-| `new_downloads` | int | New app downloads |
-| `redownloads` | int | App redownloads |
+| `installs` | int | Total installs |
+| `new_downloads` | int | Total new app downloads |
+| `redownloads` | int | Total app redownloads |
 | `lat_on_installs` | int | LAT-on installs |
 | `lat_off_installs` | int | LAT-off installs |
+| `tap_installs` | int | Tap-through installs |
+| `view_installs` | int | View-through installs |
+| `tap_new_downloads` | int | Tap-through new downloads |
+| `tap_redownloads` | int | Tap-through redownloads |
+| `view_new_downloads` | int | View-through new downloads |
+| `view_redownloads` | int | View-through redownloads |
 | `spend` | float | Total spend |
 | `currency` | str | Currency code |
 | `avg_cpa` | float | Average cost per acquisition |
 | `avg_cpt` | float | Average cost per tap |
 | `avg_cpm` | float | Average cost per thousand impressions |
 | `ttr` | float | Tap-through rate |
-| `conversion_rate` | float | Conversion rate (installs/taps) |
+| `conversion_rate` | float | Conversion rate (total installs/taps) |
+| `tap_install_rate` | float | Tap-through install rate |
 
 ### Impression Share Report Fields
 
