@@ -286,6 +286,37 @@ class AppleSearchAdsClient:
 
         return []
 
+    def get_app_details(self, adam_id: Union[int, str]) -> Dict[str, Any]:
+        """
+        Get app metadata for a specific app.
+
+        Args:
+            adam_id: The App Store app identifier
+
+        Returns:
+            Dict with app details including:
+            - adamId: App Store app identifier
+            - appName: The app name
+            - artistName: Developer/artist name
+            - primaryLanguage: Primary language code (e.g., "en-US")
+            - primaryGenre: Primary app category
+            - secondaryGenre: Secondary app category (if any)
+            - deviceClasses: List of supported devices (e.g., ["IPHONE", "IPAD"])
+            - iconPictureUrl: URL to the app icon
+            - isPreOrder: Whether app is in pre-order
+            - availableStorefronts: List of country codes where app is available
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        url = f"{self.BASE_URL}/apps/{adam_id}"
+        response = self._make_request(url, method="GET")
+
+        if response and "data" in response:
+            return response["data"]
+
+        return {}
+
     def get_adgroups(self, campaign_id: str) -> List[Dict[str, Any]]:
         """
         Get all ad groups for a specific campaign.

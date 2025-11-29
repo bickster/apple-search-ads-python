@@ -319,6 +319,7 @@ report = client.get_campaign_report(start_date, end_date, time_zone="ORTZ")
 - `get_all_campaigns(supply_source=None)` - Get campaigns from all organizations
 - `get_campaigns_with_details(fetch_all_orgs=True)` - Get campaigns with app details
 - `get_adgroups(campaign_id)` - Get ad groups for a specific campaign
+- `get_app_details(adam_id)` - Get app metadata (name, icon, genres, devices, storefronts)
 
 **Supply Source Types** (campaign ad placements):
 - `APPSTORE_SEARCH_RESULTS` - Search results ads
@@ -404,6 +405,23 @@ The `get_adgroups()` method returns ad group objects with the following fields:
 | `creationTime` | str | Creation timestamp |
 | `modificationTime` | str | Last modification timestamp |
 | `targetingDimensions` | dict | Targeting criteria (age, gender, location, device, etc.) |
+
+### App Details Fields
+
+The `get_app_details()` method returns app metadata:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `adamId` | int | App Store app identifier |
+| `appName` | str | App name |
+| `artistName` | str | Developer/artist name |
+| `primaryLanguage` | str | Primary language code (e.g., "en-US") |
+| `primaryGenre` | str | Primary app category |
+| `secondaryGenre` | str | Secondary app category (if any) |
+| `deviceClasses` | list | Supported devices: `IPHONE`, `IPAD` |
+| `iconPictureUrl` | str | URL to app icon |
+| `isPreOrder` | str | Whether app is in pre-order ("true"/"false") |
+| `availableStorefronts` | list | Country codes where app is available |
 
 ### Keyword Report Fields
 

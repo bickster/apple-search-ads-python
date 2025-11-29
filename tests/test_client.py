@@ -293,6 +293,46 @@ class TestAppleSearchAdsClient:
 
         assert orgs == []
 
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_app_details(self, mock_make_request, client):
+        """Test fetching app details."""
+        client.org_id = "test_org_id"
+        mock_make_request.return_value = {
+            "data": {
+                "id": 284815942,
+                "adamId": 284815942,
+                "appName": "Trip Trek",
+                "artistName": "Trip Trek",
+                "primaryLanguage": "en-US",
+                "primaryGenre": ">Mobile Software Applications>Utilities",
+                "secondaryGenre": ">Mobile Software Applications>Reference",
+                "deviceClasses": ["IPHONE", "IPAD"],
+                "iconPictureUrl": "https://example.com/icon.png",
+                "isPreOrder": "false",
+                "availableStorefronts": ["US"],
+            }
+        }
+
+        details = client.get_app_details("284815942")
+
+        assert details["adamId"] == 284815942
+        assert details["appName"] == "Trip Trek"
+        assert details["artistName"] == "Trip Trek"
+        assert details["primaryLanguage"] == "en-US"
+        assert "IPHONE" in details["deviceClasses"]
+        assert "US" in details["availableStorefronts"]
+        mock_make_request.assert_called_once_with(f"{client.BASE_URL}/apps/284815942", method="GET")
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_app_details_empty_response(self, mock_make_request, client):
+        """Test fetching app details with empty response."""
+        client.org_id = "test_org_id"
+        mock_make_request.return_value = {}
+
+        details = client.get_app_details("999999999")
+
+        assert details == {}
+
     def test_get_org_id_already_set(self, client):
         """Test _get_org_id when org_id is already set."""
         client.org_id = "existing_org_id"

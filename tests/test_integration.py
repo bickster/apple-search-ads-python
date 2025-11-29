@@ -189,6 +189,37 @@ class TestAppleSearchAdsIntegration:
                     ss in c.get("supplySources", []) for c in filtered
                 ), f"All filtered campaigns should have {ss}"
 
+    def test_get_app_details(self, client):
+        """Test fetching app details for a campaign's app."""
+        # Ensure we have an org set
+        if not client.org_id:
+            orgs = client.get_all_organizations()
+            if orgs:
+                client.org_id = str(orgs[0]["orgId"])
+
+        # Get campaigns first to find an adamId
+        campaigns = client.get_campaigns()
+
+        if campaigns:
+            adam_id = campaigns[0].get("adamId")
+            if adam_id:
+                print(f"\n=== Testing get_app_details for adamId: {adam_id} ===")
+
+                details = client.get_app_details(adam_id)
+
+                assert details, "Should return app details"
+                assert "adamId" in details
+                assert "appName" in details
+                assert "artistName" in details
+                assert "deviceClasses" in details
+                assert "availableStorefronts" in details
+
+                print(f"App Name: {details.get('appName')}")
+                print(f"Artist: {details.get('artistName')}")
+                print(f"Devices: {details.get('deviceClasses')}")
+                print(f"Storefronts: {details.get('availableStorefronts')}")
+                print(f"Primary Genre: {details.get('primaryGenre')}")
+
     @pytest.mark.slow
     def test_get_adgroups(self, client):
         """Test fetching ad groups for a campaign."""
