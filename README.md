@@ -319,6 +319,7 @@ report = client.get_campaign_report(start_date, end_date, time_zone="ORTZ")
 - `get_all_campaigns(supply_source=None)` - Get campaigns from all organizations
 - `get_campaigns_with_details(fetch_all_orgs=True)` - Get campaigns with app details
 - `get_adgroups(campaign_id)` - Get ad groups for a specific campaign
+- `get_keywords(campaign_id, adgroup_id=None, include_deleted=False)` - Get targeting keywords for a campaign
 - `get_app_details(adam_id)` - Get app metadata (name, icon, genres, devices, storefronts)
 
 **Supply Source Types** (campaign ad placements):
@@ -422,6 +423,21 @@ The `get_app_details()` method returns app metadata:
 | `iconPictureUrl` | str | URL to app icon |
 | `isPreOrder` | str | Whether app is in pre-order ("true"/"false") |
 | `availableStorefronts` | list | Country codes where app is available |
+
+### Keyword Fields
+
+The `get_keywords()` method returns keyword objects with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | int | Unique keyword identifier |
+| `adGroupId` | int | Parent ad group identifier |
+| `text` | str | The keyword text |
+| `status` | str | Keyword status: `ACTIVE`, `PAUSED` |
+| `matchType` | str | Match type: `EXACT`, `BROAD` |
+| `bidAmount` | dict | Bid amount with `amount` and `currency` |
+| `modificationTime` | str | Last modification timestamp |
+| `deleted` | bool | Whether the keyword is deleted |
 
 ### Keyword Report Fields
 

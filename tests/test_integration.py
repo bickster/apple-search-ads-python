@@ -252,6 +252,42 @@ class TestAppleSearchAdsIntegration:
         else:
             pytest.skip("No campaigns available for testing ad groups")
 
+    def test_get_keywords(self, client):
+        """Test fetching keywords for a campaign."""
+        # Ensure we have an org set
+        if not client.org_id:
+            orgs = client.get_all_organizations()
+            if orgs:
+                client.org_id = str(orgs[0]["orgId"])
+
+        # Get campaigns first
+        campaigns = client.get_campaigns()
+
+        if campaigns:
+            campaign_id = str(campaigns[0]["id"])
+            campaign_name = campaigns[0]["name"]
+            print(f"\n=== Testing get_keywords for campaign: {campaign_name} ===")
+
+            keywords = client.get_keywords(campaign_id)
+
+            assert isinstance(keywords, list)
+            print(f"Found {len(keywords)} keywords")
+
+            if len(keywords) > 0:
+                keyword = keywords[0]
+                assert "id" in keyword
+                assert "text" in keyword
+                assert "status" in keyword
+                assert "matchType" in keyword
+                assert "adGroupId" in keyword
+
+                print(f"Sample keyword: {keyword.get('text')}")
+                print(f"  Status: {keyword.get('status')}")
+                print(f"  Match Type: {keyword.get('matchType')}")
+                print(f"  Bid Amount: {keyword.get('bidAmount')}")
+        else:
+            pytest.skip("No campaigns available for testing keywords")
+
     @pytest.mark.slow
     def test_campaign_report_recent_data(self, client):
         """Test fetching campaign report for recent dates."""

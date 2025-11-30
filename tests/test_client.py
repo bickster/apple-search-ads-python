@@ -492,6 +492,91 @@ class TestAppleSearchAdsClient:
         mock_get_org_id.assert_called_once()
         assert adgroups == []
 
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keywords(self, mock_make_request, client):
+        """Test fetching keywords for a campaign."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": [
+                {
+                    "id": 542370642,
+                    "adGroupId": 427916203,
+                    "text": "targeting keyword example 1",
+                    "status": "PAUSED",
+                    "matchType": "BROAD",
+                    "bidAmount": {"amount": "100", "currency": "USD"},
+                    "modificationTime": "2024-04-08T21:03:02.216",
+                    "deleted": False,
+                },
+                {
+                    "id": 542370643,
+                    "adGroupId": 427916203,
+                    "text": "targeting keyword example 2",
+                    "status": "ACTIVE",
+                    "matchType": "EXACT",
+                    "bidAmount": {"amount": "50", "currency": "USD"},
+                    "modificationTime": "2024-04-08T17:53:10.899",
+                    "deleted": False,
+                },
+            ]
+        }
+
+        keywords = client.get_keywords("campaign123")
+
+        assert len(keywords) == 2
+        assert keywords[0]["text"] == "targeting keyword example 1"
+        assert keywords[0]["status"] == "PAUSED"
+        assert keywords[0]["matchType"] == "BROAD"
+        assert keywords[1]["status"] == "ACTIVE"
+        assert keywords[1]["matchType"] == "EXACT"
+        mock_make_request.assert_called_once()
+        call_args = mock_make_request.call_args
+        assert (
+            call_args[0][0]
+            == f"{client.BASE_URL}/campaigns/campaign123/adgroups/targetingkeywords/find"
+        )
+        assert call_args[1]["method"] == "POST"
+        # Should filter out deleted by default
+        assert {"field": "deleted", "operator": "EQUALS", "values": ["false"]} in call_args[1][
+            "json_data"
+        ]["conditions"]
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keywords_with_adgroup_filter(self, mock_make_request, client):
+        """Test fetching keywords filtered by ad group."""
+        client.org_id = "123"
+        mock_make_request.return_value = {"data": []}
+
+        client.get_keywords("campaign123", adgroup_id="adgroup456")
+
+        call_args = mock_make_request.call_args
+        conditions = call_args[1]["json_data"]["conditions"]
+        assert {"field": "adGroupId", "operator": "EQUALS", "values": ["adgroup456"]} in conditions
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keywords_include_deleted(self, mock_make_request, client):
+        """Test fetching keywords including deleted ones."""
+        client.org_id = "123"
+        mock_make_request.return_value = {"data": []}
+
+        client.get_keywords("campaign123", include_deleted=True)
+
+        call_args = mock_make_request.call_args
+        json_data = call_args[1]["json_data"]
+        # Should not have conditions when include_deleted=True and no adgroup filter
+        assert "conditions" not in json_data or len(json_data.get("conditions", [])) == 0
+
+    @patch.object(AppleSearchAdsClient, "_get_org_id")
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_get_keywords_no_org_id(self, mock_make_request, mock_get_org_id, client):
+        """Test fetching keywords when org_id is not set."""
+        client.org_id = None
+        mock_make_request.return_value = {"data": []}
+
+        client.get_keywords("campaign123")
+
+        mock_get_org_id.assert_called_once()
+
     @patch.object(AppleSearchAdsClient, "get_all_organizations")
     @patch.object(AppleSearchAdsClient, "get_campaigns")
     def test_get_all_campaigns(self, mock_get_campaigns, mock_get_orgs, client):

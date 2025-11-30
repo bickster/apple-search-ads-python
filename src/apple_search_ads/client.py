@@ -338,6 +338,55 @@ class AppleSearchAdsClient:
         response = self._make_request(url, params=params)
         return response.get("data", [])
 
+    def get_keywords(
+        self,
+        campaign_id: Union[int, str],
+        adgroup_id: Optional[Union[int, str]] = None,
+        include_deleted: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get targeting keywords for a campaign or specific ad group.
+
+        Args:
+            campaign_id: The campaign ID to get keywords for
+            adgroup_id: Optional ad group ID to filter keywords to a specific ad group
+            include_deleted: Whether to include deleted keywords (default: False)
+
+        Returns:
+            List of keyword dictionaries with fields:
+            - id: Unique keyword identifier
+            - adGroupId: Parent ad group identifier
+            - text: The keyword text
+            - status: Keyword status (ACTIVE, PAUSED)
+            - matchType: Match type (EXACT, BROAD)
+            - bidAmount: Bid amount dict with 'amount' and 'currency'
+            - modificationTime: Last modification timestamp
+            - deleted: Whether the keyword is deleted
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        url = f"{self.BASE_URL}/campaigns/{campaign_id}/adgroups/targetingkeywords/find"
+
+        # Build conditions
+        conditions = []
+        if not include_deleted:
+            conditions.append({"field": "deleted", "operator": "EQUALS", "values": ["false"]})
+        if adgroup_id is not None:
+            conditions.append(
+                {"field": "adGroupId", "operator": "EQUALS", "values": [str(adgroup_id)]}
+            )
+
+        request_data: Dict[str, Any] = {
+            "pagination": {"offset": 0, "limit": 1000},
+            "orderBy": [{"field": "id", "sortOrder": "ASCENDING"}],
+        }
+        if conditions:
+            request_data["conditions"] = conditions
+
+        response = self._make_request(url, method="POST", json_data=request_data)
+        return response.get("data", [])
+
     def get_campaigns(
         self,
         org_id: Optional[str] = None,
