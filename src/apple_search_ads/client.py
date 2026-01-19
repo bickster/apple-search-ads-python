@@ -387,6 +387,63 @@ class AppleSearchAdsClient:
         response = self._make_request(url, method="POST", json_data=request_data)
         return response.get("data", [])
 
+    def update_keyword_bid(
+        self,
+        campaign_id: Union[int, str],
+        adgroup_id: Union[int, str],
+        keyword_id: Union[int, str],
+        bid_amount: Union[float, str],
+        currency: str,
+    ) -> Dict[str, Any]:
+        """
+        Update the bid amount for a targeting keyword.
+
+        Args:
+            campaign_id: The campaign ID containing the keyword
+            adgroup_id: The ad group ID containing the keyword
+            keyword_id: The keyword ID to update
+            bid_amount: The new bid amount (e.g., 1.50 or "1.50")
+            currency: The currency code (e.g., "USD", "EUR")
+
+        Returns:
+            Dict with the updated keyword data
+
+        Raises:
+            ValueError: If bid_amount is not positive or currency is invalid
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        # Validate and convert bid_amount
+        try:
+            bid_value = float(bid_amount)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid bid_amount: {bid_amount}. Must be a positive number.")
+
+        if bid_value <= 0:
+            raise ValueError(f"bid_amount must be positive, got: {bid_value}")
+
+        # Validate currency (must be 3-letter code)
+        currency = str(currency).strip().upper()
+        if len(currency) != 3 or not currency.isalpha():
+            raise ValueError(
+                f"Invalid currency: {currency}. Must be a 3-letter currency code (e.g., 'USD')."
+            )
+
+        url = (
+            f"{self.BASE_URL}/campaigns/{campaign_id}/adgroups/{adgroup_id}"
+            f"/targetingkeywords/{keyword_id}"
+        )
+
+        request_data = {"bidAmount": {"amount": str(bid_value), "currency": currency}}
+
+        response = self._make_request(url, method="PUT", json_data=request_data)
+
+        if response and "data" in response:
+            return response["data"]
+
+        return {}
+
     def get_campaigns(
         self,
         org_id: Optional[str] = None,

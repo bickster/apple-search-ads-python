@@ -263,6 +263,21 @@ for adgroup in adgroups:
     print(f"Ad Group: {adgroup['name']} (Status: {adgroup['status']})")
 ```
 
+### Update keyword bid
+
+```python
+# Update the bid amount for a targeting keyword
+result = client.update_keyword_bid(
+    campaign_id="1234567890",
+    adgroup_id="9876543210",
+    keyword_id="5555555555",
+    bid_amount=1.50,  # Can also be a string: "1.50"
+    currency="USD"    # Will be normalized to uppercase
+)
+
+print(f"Updated keyword {result['id']} with bid: {result['bidAmount']}")
+```
+
 ## API Reference
 
 ### Client initialization
@@ -320,6 +335,7 @@ report = client.get_campaign_report(start_date, end_date, time_zone="ORTZ")
 - `get_campaigns_with_details(fetch_all_orgs=True)` - Get campaigns with app details
 - `get_adgroups(campaign_id)` - Get ad groups for a specific campaign
 - `get_keywords(campaign_id, adgroup_id=None, include_deleted=False)` - Get targeting keywords for a campaign
+- `update_keyword_bid(campaign_id, adgroup_id, keyword_id, bid_amount, currency)` - Update bid amount for a targeting keyword
 - `get_app_details(adam_id)` - Get app metadata (name, icon, genres, devices, storefronts)
 
 **Supply Source Types** (campaign ad placements):

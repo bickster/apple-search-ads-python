@@ -577,6 +577,203 @@ class TestAppleSearchAdsClient:
 
         mock_get_org_id.assert_called_once()
 
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_update_keyword_bid_success(self, mock_make_request, client):
+        """Test successful keyword bid update."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {
+                "id": 542370642,
+                "adGroupId": 427916203,
+                "text": "targeting keyword example",
+                "status": "ACTIVE",
+                "matchType": "BROAD",
+                "bidAmount": {"amount": "1.50", "currency": "USD"},
+                "modificationTime": "2024-04-08T21:03:02.216",
+                "deleted": False,
+            }
+        }
+
+        result = client.update_keyword_bid(
+            campaign_id="campaign123",
+            adgroup_id="adgroup456",
+            keyword_id="keyword789",
+            bid_amount=1.50,
+            currency="USD",
+        )
+
+        assert result["id"] == 542370642
+        assert result["bidAmount"]["amount"] == "1.50"
+        assert result["bidAmount"]["currency"] == "USD"
+        mock_make_request.assert_called_once()
+        call_args = mock_make_request.call_args
+        assert (
+            call_args[0][0] == f"{client.BASE_URL}/campaigns/campaign123/adgroups/adgroup456"
+            "/targetingkeywords/keyword789"
+        )
+        assert call_args[1]["method"] == "PUT"
+        assert call_args[1]["json_data"] == {"bidAmount": {"amount": "1.5", "currency": "USD"}}
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_update_keyword_bid_string_amount(self, mock_make_request, client):
+        """Test keyword bid update with string bid amount."""
+        client.org_id = "123"
+        mock_make_request.return_value = {
+            "data": {"id": 123, "bidAmount": {"amount": "2.00", "currency": "EUR"}}
+        }
+
+        result = client.update_keyword_bid(
+            campaign_id="c1",
+            adgroup_id="ag1",
+            keyword_id="kw1",
+            bid_amount="2.00",
+            currency="EUR",
+        )
+
+        assert result["bidAmount"]["amount"] == "2.00"
+        call_args = mock_make_request.call_args
+        assert call_args[1]["json_data"]["bidAmount"]["amount"] == "2.0"
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_update_keyword_bid_currency_normalization(self, mock_make_request, client):
+        """Test currency is normalized to uppercase."""
+        client.org_id = "123"
+        mock_make_request.return_value = {"data": {"id": 123}}
+
+        client.update_keyword_bid(
+            campaign_id="c1",
+            adgroup_id="ag1",
+            keyword_id="kw1",
+            bid_amount=1.0,
+            currency="usd",
+        )
+
+        call_args = mock_make_request.call_args
+        assert call_args[1]["json_data"]["bidAmount"]["currency"] == "USD"
+
+    def test_update_keyword_bid_negative_amount(self, client):
+        """Test that negative bid amount raises ValueError."""
+        client.org_id = "123"
+
+        with pytest.raises(ValueError) as exc_info:
+            client.update_keyword_bid(
+                campaign_id="c1",
+                adgroup_id="ag1",
+                keyword_id="kw1",
+                bid_amount=-1.50,
+                currency="USD",
+            )
+
+        assert "must be positive" in str(exc_info.value)
+
+    def test_update_keyword_bid_zero_amount(self, client):
+        """Test that zero bid amount raises ValueError."""
+        client.org_id = "123"
+
+        with pytest.raises(ValueError) as exc_info:
+            client.update_keyword_bid(
+                campaign_id="c1",
+                adgroup_id="ag1",
+                keyword_id="kw1",
+                bid_amount=0,
+                currency="USD",
+            )
+
+        assert "must be positive" in str(exc_info.value)
+
+    def test_update_keyword_bid_invalid_amount(self, client):
+        """Test that non-numeric bid amount raises ValueError."""
+        client.org_id = "123"
+
+        with pytest.raises(ValueError) as exc_info:
+            client.update_keyword_bid(
+                campaign_id="c1",
+                adgroup_id="ag1",
+                keyword_id="kw1",
+                bid_amount="invalid",
+                currency="USD",
+            )
+
+        assert "Invalid bid_amount" in str(exc_info.value)
+
+    def test_update_keyword_bid_invalid_currency_length(self, client):
+        """Test that currency with wrong length raises ValueError."""
+        client.org_id = "123"
+
+        with pytest.raises(ValueError) as exc_info:
+            client.update_keyword_bid(
+                campaign_id="c1",
+                adgroup_id="ag1",
+                keyword_id="kw1",
+                bid_amount=1.50,
+                currency="US",
+            )
+
+        assert "Invalid currency" in str(exc_info.value)
+
+    def test_update_keyword_bid_invalid_currency_format(self, client):
+        """Test that currency with non-alpha characters raises ValueError."""
+        client.org_id = "123"
+
+        with pytest.raises(ValueError) as exc_info:
+            client.update_keyword_bid(
+                campaign_id="c1",
+                adgroup_id="ag1",
+                keyword_id="kw1",
+                bid_amount=1.50,
+                currency="US1",
+            )
+
+        assert "Invalid currency" in str(exc_info.value)
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_update_keyword_bid_empty_response(self, mock_make_request, client):
+        """Test keyword bid update with empty response."""
+        client.org_id = "123"
+        mock_make_request.return_value = {}
+
+        result = client.update_keyword_bid(
+            campaign_id="c1",
+            adgroup_id="ag1",
+            keyword_id="kw1",
+            bid_amount=1.50,
+            currency="USD",
+        )
+
+        assert result == {}
+
+    @patch.object(AppleSearchAdsClient, "_get_org_id")
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_update_keyword_bid_no_org_id(self, mock_make_request, mock_get_org_id, client):
+        """Test keyword bid update when org_id is not set."""
+        client.org_id = None
+        mock_make_request.return_value = {"data": {"id": 123}}
+
+        client.update_keyword_bid(
+            campaign_id="c1",
+            adgroup_id="ag1",
+            keyword_id="kw1",
+            bid_amount=1.50,
+            currency="USD",
+        )
+
+        mock_get_org_id.assert_called_once()
+
+    @patch.object(AppleSearchAdsClient, "_make_request")
+    def test_update_keyword_bid_http_error(self, mock_make_request, client):
+        """Test keyword bid update with HTTP error."""
+        client.org_id = "123"
+        mock_make_request.side_effect = requests.exceptions.HTTPError("404 Not Found")
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            client.update_keyword_bid(
+                campaign_id="c1",
+                adgroup_id="ag1",
+                keyword_id="kw1",
+                bid_amount=1.50,
+                currency="USD",
+            )
+
     @patch.object(AppleSearchAdsClient, "get_all_organizations")
     @patch.object(AppleSearchAdsClient, "get_campaigns")
     def test_get_all_campaigns(self, mock_get_campaigns, mock_get_orgs, client):
