@@ -29,7 +29,6 @@ except ImportError:
 
 from apple_search_ads import AppleSearchAdsClient
 
-
 # Skip all tests in this file if credentials are not available
 pytestmark = pytest.mark.skipif(
     not all(
