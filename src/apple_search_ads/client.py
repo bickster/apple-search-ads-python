@@ -436,7 +436,7 @@ class AppleSearchAdsClient:
         )
 
         request_data = [
-            {"id": keyword_id, "bidAmount": {"amount": str(bid_value), "currency": currency}}
+            {"id": str(keyword_id), "bidAmount": {"amount": str(bid_value), "currency": currency}}
         ]
 
         response = self._make_request(url, method="PUT", json_data=request_data)
