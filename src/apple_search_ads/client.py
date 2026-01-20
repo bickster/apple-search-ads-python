@@ -432,15 +432,21 @@ class AppleSearchAdsClient:
 
         url = (
             f"{self.BASE_URL}/campaigns/{campaign_id}/adgroups/{adgroup_id}"
-            f"/targetingkeywords/{keyword_id}"
+            f"/targetingkeywords/bulk"
         )
 
-        request_data = {"bidAmount": {"amount": str(bid_value), "currency": currency}}
+        request_data = [
+            {"id": keyword_id, "bidAmount": {"amount": str(bid_value), "currency": currency}}
+        ]
 
         response = self._make_request(url, method="PUT", json_data=request_data)
 
         if response and "data" in response:
-            return response["data"]
+            data = response["data"]
+            # Bulk endpoint returns a list, extract the first item
+            if isinstance(data, list) and len(data) > 0:
+                return data[0]
+            return data
 
         return {}
 

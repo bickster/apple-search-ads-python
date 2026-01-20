@@ -582,16 +582,18 @@ class TestAppleSearchAdsClient:
         """Test successful keyword bid update."""
         client.org_id = "123"
         mock_make_request.return_value = {
-            "data": {
-                "id": 542370642,
-                "adGroupId": 427916203,
-                "text": "targeting keyword example",
-                "status": "ACTIVE",
-                "matchType": "BROAD",
-                "bidAmount": {"amount": "1.50", "currency": "USD"},
-                "modificationTime": "2024-04-08T21:03:02.216",
-                "deleted": False,
-            }
+            "data": [
+                {
+                    "id": 542370642,
+                    "adGroupId": 427916203,
+                    "text": "targeting keyword example",
+                    "status": "ACTIVE",
+                    "matchType": "BROAD",
+                    "bidAmount": {"amount": "1.50", "currency": "USD"},
+                    "modificationTime": "2024-04-08T21:03:02.216",
+                    "deleted": False,
+                }
+            ]
         }
 
         result = client.update_keyword_bid(
@@ -609,17 +611,19 @@ class TestAppleSearchAdsClient:
         call_args = mock_make_request.call_args
         assert (
             call_args[0][0] == f"{client.BASE_URL}/campaigns/campaign123/adgroups/adgroup456"
-            "/targetingkeywords/keyword789"
+            "/targetingkeywords/bulk"
         )
         assert call_args[1]["method"] == "PUT"
-        assert call_args[1]["json_data"] == {"bidAmount": {"amount": "1.5", "currency": "USD"}}
+        assert call_args[1]["json_data"] == [
+            {"id": "keyword789", "bidAmount": {"amount": "1.5", "currency": "USD"}}
+        ]
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_update_keyword_bid_string_amount(self, mock_make_request, client):
         """Test keyword bid update with string bid amount."""
         client.org_id = "123"
         mock_make_request.return_value = {
-            "data": {"id": 123, "bidAmount": {"amount": "2.00", "currency": "EUR"}}
+            "data": [{"id": 123, "bidAmount": {"amount": "2.00", "currency": "EUR"}}]
         }
 
         result = client.update_keyword_bid(
@@ -632,13 +636,13 @@ class TestAppleSearchAdsClient:
 
         assert result["bidAmount"]["amount"] == "2.00"
         call_args = mock_make_request.call_args
-        assert call_args[1]["json_data"]["bidAmount"]["amount"] == "2.0"
+        assert call_args[1]["json_data"][0]["bidAmount"]["amount"] == "2.0"
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_update_keyword_bid_currency_normalization(self, mock_make_request, client):
         """Test currency is normalized to uppercase."""
         client.org_id = "123"
-        mock_make_request.return_value = {"data": {"id": 123}}
+        mock_make_request.return_value = {"data": [{"id": 123}]}
 
         client.update_keyword_bid(
             campaign_id="c1",
@@ -649,7 +653,7 @@ class TestAppleSearchAdsClient:
         )
 
         call_args = mock_make_request.call_args
-        assert call_args[1]["json_data"]["bidAmount"]["currency"] == "USD"
+        assert call_args[1]["json_data"][0]["bidAmount"]["currency"] == "USD"
 
     def test_update_keyword_bid_negative_amount(self, client):
         """Test that negative bid amount raises ValueError."""
@@ -747,7 +751,7 @@ class TestAppleSearchAdsClient:
     def test_update_keyword_bid_no_org_id(self, mock_make_request, mock_get_org_id, client):
         """Test keyword bid update when org_id is not set."""
         client.org_id = None
-        mock_make_request.return_value = {"data": {"id": 123}}
+        mock_make_request.return_value = {"data": [{"id": 123}]}
 
         client.update_keyword_bid(
             campaign_id="c1",
