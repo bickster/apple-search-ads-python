@@ -13,6 +13,15 @@ import requests
 from apple_search_ads import AppleSearchAdsClient
 
 
+def test_module_version_matches_installed_metadata():
+    """__version__ must track the installed dist version, never a hardcoded string."""
+    import importlib.metadata
+
+    import apple_search_ads
+
+    assert apple_search_ads.__version__ == importlib.metadata.version("apple-search-ads-client")
+
+
 def modern_day_metrics(**overrides):
     """A complete non-legacy day row satisfying strict (v3) parsing."""
     metrics = {

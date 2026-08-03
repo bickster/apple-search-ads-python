@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `apple_search_ads.__version__` was hardcoded to "0.1.0" and had drifted from the real
+  release version since the first release (`release.sh` bumps only `setup.py` and
+  `pyproject.toml`). It is now derived from the installed dist metadata via
+  `importlib.metadata`, so it can never drift again and needs no per-release edit.
+
 ## [3.1.0] - 2026-08-03
 
 ### Added
