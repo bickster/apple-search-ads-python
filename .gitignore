@@ -156,3 +156,5 @@ test_credentials.json
 # PyPI configuration
 .pypirc
 .pypirc.template
+# Claude Code local (per-machine) settings
+.claude/settings.local.json
