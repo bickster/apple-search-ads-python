@@ -20,14 +20,31 @@ Line numbers refer to **this repo's** `src/apple_search_ads/client.py` at v2.7.1
 
 ---
 
+> ### ⚠️ CORRECTION (2026-08-03) — the urgency claim in this spec was WRONG
+> An earlier version said *"2 campaigns already exceed the limit"* (`…REDBOX…` 1,327 keywords, `SMO` 1,012)
+> and called truncation "already breaking in production." **Both figures were wrong.** They came from
+> **Adapty's** keyword universe queried with `include_outdated: True`, which spans campaigns that are **not
+> enabled** — REDBOX has no active campaigns (confirmed by the operator), and `SMO` is `PAUSED` + DISPLAY,
+> which **404s** on the keyword endpoint and cannot be pulled at all.
+>
+> **Apple's real numbers** (live, largest campaign `FAH - US` / `9009184`): `totalResults` = **125** for one
+> day, **199** for a full month — roughly **5× under** the 1000 limit. Apple paginates on **API rows (one
+> per keyword, days nested in `granularity[]`)**, not the flattened keyword×day count, so a longer date
+> range does not approach the ceiling. Whole-org totals: **766** keyword rows/day, **983** search-term
+> rows/day. The closest thing to the limit is `get_keywords` (the targeting list) at **687** for `FAH - US`.
+>
+> **What this changes:** pagination was a **latent** risk, not live data loss. It is still correct
+> engineering and the fix is still right — the *urgency* framing was not. Nothing was being lost.
+
 ## Why (one paragraph)
 
 `bickster_os` lands money that must reconcile to Apple **to the cent**, and its pipeline asserts that
 required Apple fields are *present* before constructing a row. The SDK today silently substitutes `0` for
 any missing metric and silently truncates any report over 1000 rows. Both are invisible failures: they
 produce plausible numbers, not errors. At campaign grain (190 rows) neither has bitten. ASA Pass 2 moves to
-keyword and search-term grain (22,034 keywords today, 2 campaigns already over the 1000 limit), where both
-will bite immediately and quietly.
+keyword and search-term grain (~766 keyword + ~983 search-term rows/day org-wide; largest single
+campaign 199 rows/month — see the correction above: nothing exceeds the limit today, but nothing would
+tell you if it started to).
 
 ---
 
@@ -42,8 +59,9 @@ Any report or keyword list exceeding 1000 rows is **silently truncated**.
 `_extract_rows_from_response` (**:214-223**) returns only the rows and **discards the pagination block**, so
 callers cannot even detect truncation.
 
-**Already breaking in production data:** `Fitbit to Apple Health Sync - US - REDBOX -` has **1,327**
-keywords and `SMO` has **1,012**. Eight more campaigns are ≥500 and rising.
+**Not currently breaking — see the correction at the top.** Apple's largest live campaign returns 125 rows/day
+(199/month) against a 1000 limit. The risk is that truncation would be *silent* if it were ever hit, and
+`get_keywords` at 687 for `FAH - US` is the closest approach to the ceiling.
 
 ### Verified response shape (live, 2026-07-31)
 

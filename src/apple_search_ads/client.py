@@ -10,7 +10,7 @@ import os
 import requests
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional, Union, Any
+from typing import Dict, List, Optional, Tuple, Union, Any
 import pandas as pd
 from ratelimit import limits, sleep_and_retry
 
@@ -35,6 +35,11 @@ class AppleSearchAdsClient:
             when a required field is absent, returns None for absent ratios, and
             returns money as exact Decimal values. If False, restores the v2
             zero-fill behavior (floats, 0 defaults) as a migration aid only.
+        timeout: Timeout in seconds applied to every HTTP request (default 30.0).
+            Accepts a float or a (connect, read) tuple, passed straight to
+            requests. None disables the timeout entirely — requests will then
+            block indefinitely on a stalled connection, as in versions <= 3.0.0.
+            A tripped timeout raises requests.exceptions.Timeout.
 
     Example:
         >>> client = AppleSearchAdsClient(
@@ -57,6 +62,7 @@ class AppleSearchAdsClient:
         private_key_content: Optional[str] = None,
         org_id: Optional[str] = None,
         strict: bool = True,
+        timeout: Optional[Union[float, Tuple[float, float]]] = 30.0,
     ):
         # Try to get credentials from parameters, then environment variables
         self.client_id = client_id or os.environ.get("APPLE_SEARCH_ADS_CLIENT_ID")
@@ -81,6 +87,7 @@ class AppleSearchAdsClient:
 
         self.org_id = org_id
         self.strict = strict
+        self.timeout = timeout
         self._token: Optional[str] = None
         self._token_expiry: Optional[float] = None
 
@@ -131,7 +138,7 @@ class AppleSearchAdsClient:
             "scope": "searchadsorg",
         }
 
-        response = requests.post(token_url, data=data)
+        response = requests.post(token_url, data=data, timeout=self.timeout)
         response.raise_for_status()
 
         token_data = response.json()
@@ -186,6 +193,7 @@ class AppleSearchAdsClient:
             headers=self._get_headers(include_org_context=include_org_context),
             json=json_data,
             params=params,
+            timeout=self.timeout,
         )
         response.raise_for_status()
         return response.json()
@@ -1586,7 +1594,7 @@ class AppleSearchAdsClient:
         import requests as req
 
         try:
-            response = req.get(download_uri, timeout=60)
+            response = req.get(download_uri, timeout=self.timeout)
             response.raise_for_status()
 
             # The response is typically CSV or JSON - try to parse

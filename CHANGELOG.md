@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-08-03
+
+### Added
+- **Request timeouts.** Every HTTP request — API calls, the OAuth token fetch, and the
+  impression-share report download — now carries a timeout (default 30s) instead of
+  blocking indefinitely on a stalled connection. Configure via the new `timeout` client
+  parameter: a float, a `(connect, read)` tuple, or `None` to restore the old unbounded
+  behavior. A tripped timeout raises `requests.exceptions.Timeout`.
+
 ## [3.0.0] - 2026-08-03
 
 **Migration note (breaking):** metrics now raise instead of defaulting to 0; money is

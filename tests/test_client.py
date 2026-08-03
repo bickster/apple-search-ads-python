@@ -201,6 +201,7 @@ class TestAppleSearchAdsClient:
                 "client_secret": "test_secret",
                 "scope": "searchadsorg",
             },
+            timeout=30.0,
         )
 
     @patch("requests.post")
@@ -263,7 +264,12 @@ class TestAppleSearchAdsClient:
 
         assert result == {"data": "test"}
         mock_request.assert_called_once_with(
-            method="GET", url="https://test.url", headers={"test": "header"}, json=None, params=None
+            method="GET",
+            url="https://test.url",
+            headers={"test": "header"},
+            json=None,
+            params=None,
+            timeout=30.0,
         )
 
     @patch("requests.request")
@@ -305,6 +311,69 @@ class TestAppleSearchAdsClient:
         with patch.object(client, "_get_headers", return_value={"test": "header"}):
             with pytest.raises(requests.exceptions.HTTPError):
                 client._make_request("https://test.url")
+
+    @patch("requests.request")
+    def test_make_request_passes_default_timeout(self, mock_request, client):
+        """Every API request carries the default 30s timeout instead of blocking forever."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"data": "test"}
+        mock_request.return_value = mock_response
+
+        with patch.object(client, "_get_headers", return_value={}):
+            client._make_request("https://test.url")
+
+        assert mock_request.call_args.kwargs["timeout"] == 30.0
+
+    @patch("requests.request")
+    def test_make_request_passes_custom_timeout(self, mock_request, mock_credentials):
+        """A timeout given at construction is passed through to requests."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"data": "test"}
+        mock_request.return_value = mock_response
+
+        client = AppleSearchAdsClient(**mock_credentials, timeout=5.0)
+        with patch.object(client, "_get_headers", return_value={}):
+            client._make_request("https://test.url")
+
+        assert mock_request.call_args.kwargs["timeout"] == 5.0
+
+    @patch("requests.request")
+    def test_make_request_timeout_none_disables(self, mock_request, mock_credentials):
+        """timeout=None restores the old block-forever behavior explicitly."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"data": "test"}
+        mock_request.return_value = mock_response
+
+        client = AppleSearchAdsClient(**mock_credentials, timeout=None)
+        with patch.object(client, "_get_headers", return_value={}):
+            client._make_request("https://test.url")
+
+        assert mock_request.call_args.kwargs["timeout"] is None
+
+    @patch("requests.post")
+    def test_token_fetch_passes_timeout(self, mock_post, client):
+        """The OAuth token request also carries the timeout."""
+        mock_response = Mock()
+        mock_response.json.return_value = {"access_token": "tok"}
+        mock_post.return_value = mock_response
+
+        with patch.object(client, "_generate_client_secret", return_value="secret"):
+            client._get_access_token()
+
+        assert mock_post.call_args.kwargs["timeout"] == 30.0
+
+    @patch("requests.get")
+    def test_report_download_uses_client_timeout(self, mock_get, mock_credentials):
+        """The impression-share download uses the client timeout, not a hardcoded 60."""
+        mock_response = Mock()
+        mock_response.headers = {"Content-Type": "application/json"}
+        mock_response.json.return_value = []
+        mock_get.return_value = mock_response
+
+        client = AppleSearchAdsClient(**mock_credentials, timeout=7.0)
+        client._download_impression_share_report("https://example.com/report")
+
+        assert mock_get.call_args.kwargs["timeout"] == 7.0
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_all_organizations(self, mock_make_request, client):
