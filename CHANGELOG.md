@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-03
+
+**Migration note (breaking):** metrics now raise instead of defaulting to 0; money is
+`Decimal`; ratios are `None` when absent; reports now page automatically. Pass
+`strict=False` to the client to restore v2 zero-fill parsing as a temporary migration aid
+(pagination remains on regardless).
+
+### Changed (breaking)
+- **Strict metric parsing is the default.** A required metric key missing from an API row
+  raises `MissingMetricError` (naming the missing key and listing the keys that were
+  present) instead of silently substituting `0`.
+- **Money is exact.** `spend`, `avg_cpa`, `avg_cpt`, and `avg_cpm` are `decimal.Decimal`
+  built from the original JSON string Apple sent — no float rounding. In DataFrames these
+  columns have `object` dtype.
+- **Absent ratios are `None`, not `0`.** `ttr`, `conversion_rate`, and `tap_install_rate`
+  are legitimately absent on 0-denominator days; `None` keeps that distinguishable from a
+  genuine zero.
+- **LAT metrics are optional.** `lat_on_installs` / `lat_off_installs` are `None` when
+  absent — the live API no longer returns them (Apple retired LAT reporting).
+
+### Added
+- **Automatic pagination for all reports and `get_keywords`.** Reports over 1000 rows are
+  no longer silently truncated; the client follows `totalResults`/`startIndex`/`itemsPerPage`
+  until complete and raises `PaginationError` if a page makes no progress.
+- **Raw report accessors** for consumers that validate entries themselves:
+  `get_campaign_report_raw()`, `get_adgroup_report_raw()`, `get_keyword_report_raw()`,
+  `get_search_term_report_raw()`, `get_adgroup_search_term_report_raw()` return the fully
+  paginated `List[Dict[str, Any]]` rows exactly as Apple sent them (money as original
+  strings).
+- `strict: bool = True` client parameter; `MissingMetricError` and `PaginationError`
+  exception types.
+
 ## [0.1.0] - 2024-XX-XX
 
 ### Added

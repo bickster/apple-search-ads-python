@@ -9,9 +9,12 @@ import time
 import os
 import requests
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Dict, List, Optional, Union, Any
 import pandas as pd
 from ratelimit import limits, sleep_and_retry
+
+from .exceptions import MissingMetricError, PaginationError
 
 
 class AppleSearchAdsClient:
@@ -28,6 +31,10 @@ class AppleSearchAdsClient:
         private_key_path: Path to the private key .p8 file
         private_key_content: Private key content as string (alternative to file path)
         org_id: Optional organization ID (will be fetched automatically if not provided)
+        strict: If True (default), report metric parsing raises MissingMetricError
+            when a required field is absent, returns None for absent ratios, and
+            returns money as exact Decimal values. If False, restores the v2
+            zero-fill behavior (floats, 0 defaults) as a migration aid only.
 
     Example:
         >>> client = AppleSearchAdsClient(
@@ -49,6 +56,7 @@ class AppleSearchAdsClient:
         private_key_path: Optional[str] = None,
         private_key_content: Optional[str] = None,
         org_id: Optional[str] = None,
+        strict: bool = True,
     ):
         # Try to get credentials from parameters, then environment variables
         self.client_id = client_id or os.environ.get("APPLE_SEARCH_ADS_CLIENT_ID")
@@ -72,6 +80,7 @@ class AppleSearchAdsClient:
             )
 
         self.org_id = org_id
+        self.strict = strict
         self._token: Optional[str] = None
         self._token_expiry: Optional[float] = None
 
@@ -193,6 +202,8 @@ class AppleSearchAdsClient:
         end_date: datetime,
         granularity: Optional[str] = None,
         time_zone: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 1000,
     ) -> Dict[str, Any]:
         """Build standard report request data."""
         request: Dict[str, Any] = {
@@ -200,7 +211,7 @@ class AppleSearchAdsClient:
             "endTime": end_date.strftime("%Y-%m-%d"),
             "selector": {
                 "orderBy": [{"field": "localSpend", "sortOrder": "DESCENDING"}],
-                "pagination": {"limit": 1000},
+                "pagination": {"offset": offset, "limit": limit},
             },
             "returnRowTotals": True,
             "returnRecordsWithNoMetrics": False,
@@ -222,8 +233,148 @@ class AppleSearchAdsClient:
             return data["rows"]
         return []
 
+    def _extract_pagination_from_response(
+        self, response: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Extract the top-level pagination block (a sibling of `data`, not nested in it)."""
+        if not response:
+            return None
+        pagination = response.get("pagination")
+        if isinstance(pagination, dict):
+            return pagination
+        return None
+
+    def _fetch_report_rows(
+        self,
+        url: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+        granularity: Optional[str] = None,
+        time_zone: Optional[str] = None,
+        limit: int = 1000,
+        paginate: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch all rows for a report, following pagination until complete.
+
+        Raises PaginationError if a page makes no progress (would loop forever)
+        or if paginate=False and the single page does not contain all rows.
+        """
+        start_dt = self._parse_date_param(start_date)
+        end_dt = self._parse_date_param(end_date)
+
+        rows: List[Dict[str, Any]] = []
+        offset = 0
+        while True:
+            request_data = self._build_report_request(
+                start_dt, end_dt, granularity, time_zone, offset=offset, limit=limit
+            )
+            response = self._make_request(url, method="POST", json_data=request_data)
+            page_rows = self._extract_rows_from_response(response)
+            pagination = self._extract_pagination_from_response(response)
+            rows.extend(page_rows)
+
+            if pagination is None:
+                break
+
+            total = int(pagination.get("totalResults", len(rows)))
+            start_index = int(pagination.get("startIndex", offset))
+            items = int(pagination.get("itemsPerPage", len(page_rows)))
+
+            if start_index + items >= total:
+                break
+            if not paginate:
+                raise PaginationError(
+                    f"Result truncated: received {len(rows)} of {total} rows from {url} "
+                    "with pagination disabled"
+                )
+            if items == 0 or not page_rows:
+                raise PaginationError(
+                    f"No pagination progress from {url}: page at offset {offset} returned "
+                    f"itemsPerPage={items} with totalResults={total}"
+                )
+            offset = start_index + items
+
+        return rows
+
+    # Output field -> (legacy Apple key, modern Apple key).
+    # Count facts must be present in strict mode; ratios may legitimately be
+    # absent (0-denominator days); optional money is ratio-derived.
+    _COUNT_FACTS = (
+        ("impressions", "impressions", "impressions"),
+        ("taps", "taps", "taps"),
+        ("installs", "installs", "totalInstalls"),
+        ("new_downloads", "newDownloads", "totalNewDownloads"),
+        ("redownloads", "redownloads", "totalRedownloads"),
+        ("tap_installs", "tapInstalls", "tapInstalls"),
+        ("view_installs", "viewInstalls", "viewInstalls"),
+        ("tap_new_downloads", "tapNewDownloads", "tapNewDownloads"),
+        ("tap_redownloads", "tapRedownloads", "tapRedownloads"),
+        ("view_new_downloads", "viewNewDownloads", "viewNewDownloads"),
+        ("view_redownloads", "viewRedownloads", "viewRedownloads"),
+    )
+    # Retired by Apple (LAT ended with ATT); the live API omits them entirely
+    # (verified 2026-08-03). Absent -> None, never 0.
+    _OPTIONAL_COUNTS = (
+        ("lat_on_installs", "latOnInstalls", "latOnInstalls"),
+        ("lat_off_installs", "latOffInstalls", "latOffInstalls"),
+    )
+    _OPTIONAL_MONEY = (
+        ("avg_cpa", "avgCPA", "totalAvgCPI"),
+        ("avg_cpt", "avgCPT", "avgCPT"),
+        ("avg_cpm", "avgCPM", "avgCPM"),
+    )
+    _RATIOS = (
+        ("ttr", "ttr", "ttr"),
+        ("conversion_rate", "conversionRate", "totalInstallRate"),
+        ("tap_install_rate", "tapInstallRate", "tapInstallRate"),
+    )
+
+    @staticmethod
+    def _require_metric(day_data: Dict[str, Any], key: str) -> Any:
+        if key not in day_data:
+            raise MissingMetricError(key, list(day_data.keys()))
+        return day_data[key]
+
     def _parse_metrics(self, day_data: Dict[str, Any], is_legacy: bool = False) -> Dict[str, Any]:
         """Parse common metrics from row data."""
+        if self.strict:
+            return self._parse_metrics_strict(day_data, is_legacy)
+        return self._parse_metrics_zero_fill(day_data, is_legacy)
+
+    def _parse_metrics_strict(self, day_data: Dict[str, Any], is_legacy: bool) -> Dict[str, Any]:
+        """Strict parsing: base facts must be present, absent ratios are None,
+        money is Decimal built from the original JSON string."""
+        metrics: Dict[str, Any] = {}
+
+        for out_name, legacy_key, modern_key in self._COUNT_FACTS:
+            key = legacy_key if is_legacy else modern_key
+            metrics[out_name] = self._require_metric(day_data, key)
+
+        for out_name, legacy_key, modern_key in self._OPTIONAL_COUNTS:
+            key = legacy_key if is_legacy else modern_key
+            metrics[out_name] = day_data.get(key)
+
+        local_spend = self._require_metric(day_data, "localSpend") or {}
+        if "amount" not in local_spend:
+            raise MissingMetricError("localSpend.amount", list(local_spend.keys()))
+        metrics["spend"] = Decimal(str(local_spend["amount"]))
+        metrics["currency"] = local_spend.get("currency")
+
+        for out_name, legacy_key, modern_key in self._OPTIONAL_MONEY:
+            key = legacy_key if is_legacy else modern_key
+            amount = (day_data.get(key) or {}).get("amount")
+            metrics[out_name] = Decimal(str(amount)) if amount is not None else None
+
+        for out_name, legacy_key, modern_key in self._RATIOS:
+            key = legacy_key if is_legacy else modern_key
+            metrics[out_name] = day_data.get(key)
+
+        return metrics
+
+    def _parse_metrics_zero_fill(self, day_data: Dict[str, Any], is_legacy: bool) -> Dict[str, Any]:
+        """v2 parsing, preserved exactly for strict=False: every field defaults
+        to 0 and money is float. Migration aid only — silently masks missing data."""
         if is_legacy:
             return {
                 "impressions": day_data.get("impressions", 0),
@@ -377,15 +528,39 @@ class AppleSearchAdsClient:
                 {"field": "adGroupId", "operator": "EQUALS", "values": [str(adgroup_id)]}
             )
 
-        request_data: Dict[str, Any] = {
-            "pagination": {"offset": 0, "limit": 1000},
-            "orderBy": [{"field": "id", "sortOrder": "ASCENDING"}],
-        }
-        if conditions:
-            request_data["conditions"] = conditions
+        keywords: List[Dict[str, Any]] = []
+        offset = 0
+        limit = 1000
+        while True:
+            request_data: Dict[str, Any] = {
+                "pagination": {"offset": offset, "limit": limit},
+                "orderBy": [{"field": "id", "sortOrder": "ASCENDING"}],
+            }
+            if conditions:
+                request_data["conditions"] = conditions
 
-        response = self._make_request(url, method="POST", json_data=request_data)
-        return response.get("data", [])
+            response = self._make_request(url, method="POST", json_data=request_data)
+            page = response.get("data", []) or []
+            keywords.extend(page)
+
+            pagination = self._extract_pagination_from_response(response)
+            if pagination is None:
+                break
+
+            total = int(pagination.get("totalResults", len(keywords)))
+            start_index = int(pagination.get("startIndex", offset))
+            items = int(pagination.get("itemsPerPage", len(page)))
+
+            if start_index + items >= total:
+                break
+            if items == 0 or not page:
+                raise PaginationError(
+                    f"No pagination progress from {url}: page at offset {offset} returned "
+                    f"itemsPerPage={items} with totalResults={total}"
+                )
+            offset = start_index + items
+
+        return keywords
 
     def update_keyword_bid(
         self,
@@ -552,6 +727,34 @@ class AppleSearchAdsClient:
         base.update(self._parse_metrics(row, is_legacy))
         return base
 
+    def get_campaign_report_raw(
+        self,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+        granularity: str = "DAILY",
+        time_zone: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get campaign performance report as raw API rows.
+
+        Returns every row across all pages, exactly as Apple sent them —
+        no metric parsing, money amounts left as their original JSON strings.
+
+        Args:
+            start_date: Start date for the report (datetime or YYYY-MM-DD string)
+            end_date: End date for the report (datetime or YYYY-MM-DD string)
+            granularity: DAILY, WEEKLY, or MONTHLY
+            time_zone: Optional timezone (e.g., "ORTZ" for org timezone, "UTC")
+
+        Returns:
+            List of raw report row dicts (metadata + granularity/metrics).
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        url = f"{self.BASE_URL}/reports/campaigns"
+        return self._fetch_report_rows(url, start_date, end_date, granularity, time_zone)
+
     def get_campaign_report(
         self,
         start_date: Union[datetime, str],
@@ -571,16 +774,7 @@ class AppleSearchAdsClient:
         Returns:
             DataFrame with campaign performance metrics.
         """
-        if not self.org_id:
-            self._get_org_id()
-
-        start_date = self._parse_date_param(start_date)
-        end_date = self._parse_date_param(end_date)
-
-        url = f"{self.BASE_URL}/reports/campaigns"
-        request_data = self._build_report_request(start_date, end_date, granularity, time_zone)
-        response = self._make_request(url, method="POST", json_data=request_data)
-        rows = self._extract_rows_from_response(response)
+        rows = self.get_campaign_report_raw(start_date, end_date, granularity, time_zone)
 
         if not rows:
             return pd.DataFrame()
@@ -614,6 +808,26 @@ class AppleSearchAdsClient:
         base.update(self._parse_metrics(row, is_legacy))
         return base
 
+    def get_adgroup_report_raw(
+        self,
+        campaign_id: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+        granularity: str = "DAILY",
+        time_zone: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get ad group performance report as raw API rows.
+
+        Returns every row across all pages, exactly as Apple sent them —
+        no metric parsing, money amounts left as their original JSON strings.
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/adgroups"
+        return self._fetch_report_rows(url, start_date, end_date, granularity, time_zone)
+
     def get_adgroup_report(
         self,
         campaign_id: str,
@@ -635,16 +849,9 @@ class AppleSearchAdsClient:
         Returns:
             DataFrame with ad group performance metrics.
         """
-        if not self.org_id:
-            self._get_org_id()
-
-        start_date = self._parse_date_param(start_date)
-        end_date = self._parse_date_param(end_date)
-
-        url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/adgroups"
-        request_data = self._build_report_request(start_date, end_date, granularity, time_zone)
-        response = self._make_request(url, method="POST", json_data=request_data)
-        rows = self._extract_rows_from_response(response)
+        rows = self.get_adgroup_report_raw(
+            campaign_id, start_date, end_date, granularity, time_zone
+        )
 
         if not rows:
             return pd.DataFrame()
@@ -682,6 +889,26 @@ class AppleSearchAdsClient:
         base.update(self._parse_metrics(row, is_legacy))
         return base
 
+    def get_keyword_report_raw(
+        self,
+        campaign_id: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+        granularity: str = "DAILY",
+        time_zone: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get keyword performance report as raw API rows.
+
+        Returns every row across all pages, exactly as Apple sent them —
+        no metric parsing, money amounts left as their original JSON strings.
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/keywords"
+        return self._fetch_report_rows(url, start_date, end_date, granularity, time_zone)
+
     def get_keyword_report(
         self,
         campaign_id: str,
@@ -703,16 +930,9 @@ class AppleSearchAdsClient:
         Returns:
             DataFrame with keyword performance metrics.
         """
-        if not self.org_id:
-            self._get_org_id()
-
-        start_date = self._parse_date_param(start_date)
-        end_date = self._parse_date_param(end_date)
-
-        url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/keywords"
-        request_data = self._build_report_request(start_date, end_date, granularity, time_zone)
-        response = self._make_request(url, method="POST", json_data=request_data)
-        rows = self._extract_rows_from_response(response)
+        rows = self.get_keyword_report_raw(
+            campaign_id, start_date, end_date, granularity, time_zone
+        )
 
         if not rows:
             return pd.DataFrame()
@@ -761,6 +981,25 @@ class AppleSearchAdsClient:
         base.update(self._parse_metrics(row, is_legacy))
         return base
 
+    def get_search_term_report_raw(
+        self,
+        campaign_id: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+    ) -> List[Dict[str, Any]]:
+        """
+        Get search term performance report as raw API rows.
+
+        Returns every row across all pages, exactly as Apple sent them —
+        no metric parsing, money amounts left as their original JSON strings.
+        Uses ORTZ (Organization Reference Time Zone) as required by the API.
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/searchterms"
+        return self._fetch_report_rows(url, start_date, end_date, time_zone="ORTZ")
+
     def get_search_term_report(
         self,
         campaign_id: str,
@@ -788,16 +1027,10 @@ class AppleSearchAdsClient:
             Uses ORTZ (Organization Reference Time Zone) as required by the API.
             Search term reports do not support granularity grouping.
         """
-        if not self.org_id:
-            self._get_org_id()
-
         start_date = self._parse_date_param(start_date)
         end_date = self._parse_date_param(end_date)
 
-        url = f"{self.BASE_URL}/reports/campaigns/{campaign_id}/searchterms"
-        request_data = self._build_report_request(start_date, end_date, time_zone="ORTZ")
-        response = self._make_request(url, method="POST", json_data=request_data)
-        rows = self._extract_rows_from_response(response)
+        rows = self.get_search_term_report_raw(campaign_id, start_date, end_date)
 
         if not rows:
             return pd.DataFrame()
@@ -830,6 +1063,28 @@ class AppleSearchAdsClient:
 
         return pd.DataFrame(data)
 
+    def get_adgroup_search_term_report_raw(
+        self,
+        campaign_id: str,
+        adgroup_id: str,
+        start_date: Union[datetime, str],
+        end_date: Union[datetime, str],
+    ) -> List[Dict[str, Any]]:
+        """
+        Get ad group search term performance report as raw API rows.
+
+        Returns every row across all pages, exactly as Apple sent them —
+        no metric parsing, money amounts left as their original JSON strings.
+        Uses ORTZ (Organization Reference Time Zone) as required by the API.
+        """
+        if not self.org_id:
+            self._get_org_id()
+
+        url = (
+            f"{self.BASE_URL}/reports/campaigns/{campaign_id}" f"/adgroups/{adgroup_id}/searchterms"
+        )
+        return self._fetch_report_rows(url, start_date, end_date, time_zone="ORTZ")
+
     def get_adgroup_search_term_report(
         self,
         campaign_id: str,
@@ -861,18 +1116,12 @@ class AppleSearchAdsClient:
             Uses ORTZ (Organization Reference Time Zone) as required by the API.
             Search term reports do not support granularity grouping.
         """
-        if not self.org_id:
-            self._get_org_id()
-
         start_date = self._parse_date_param(start_date)
         end_date = self._parse_date_param(end_date)
 
-        url = (
-            f"{self.BASE_URL}/reports/campaigns/{campaign_id}" f"/adgroups/{adgroup_id}/searchterms"
+        rows = self.get_adgroup_search_term_report_raw(
+            campaign_id, adgroup_id, start_date, end_date
         )
-        request_data = self._build_report_request(start_date, end_date, time_zone="ORTZ")
-        response = self._make_request(url, method="POST", json_data=request_data)
-        rows = self._extract_rows_from_response(response)
 
         if not rows:
             return pd.DataFrame()
@@ -1046,15 +1295,19 @@ class AppleSearchAdsClient:
         return all_campaign_data
 
     def _add_derived_metrics(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Add derived metrics (cpi, ctr, cvr) to a DataFrame."""
+        """Add derived metrics (cpi, ctr, cvr) to a DataFrame.
+
+        Derived ratios are floats even in strict mode (spend may be Decimal);
+        exact money stays in the source `spend` column.
+        """
         df["cpi"] = df.apply(
-            lambda x: x["spend"] / x["installs"] if x["installs"] > 0 else 0, axis=1
+            lambda x: float(x["spend"]) / x["installs"] if x["installs"] > 0 else 0.0, axis=1
         ).round(2)
         df["ctr"] = df.apply(
-            lambda x: (x["taps"] / x["impressions"] * 100) if x["impressions"] > 0 else 0, axis=1
+            lambda x: (x["taps"] / x["impressions"] * 100) if x["impressions"] > 0 else 0.0, axis=1
         ).round(2)
         df["cvr"] = df.apply(
-            lambda x: (x["installs"] / x["taps"] * 100) if x["taps"] > 0 else 0, axis=1
+            lambda x: (x["installs"] / x["taps"] * 100) if x["taps"] > 0 else 0.0, axis=1
         ).round(2)
         return df
 

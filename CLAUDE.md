@@ -2,6 +2,22 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> ## ⭐ ACTIVE WORK — read `docs/v3-fix-spec.md` FIRST
+>
+> A **v3.0.0 (breaking)** change is specced and approved: **[`docs/v3-fix-spec.md`](docs/v3-fix-spec.md)**.
+> Read it before touching `src/apple_search_ads/client.py`. Two defects, both verified against the live
+> Apple API on 2026-08-03:
+>
+> 1. **No pagination anywhere.** `_build_report_request` hardcodes `limit: 1000` with no offset and there
+>    is no offset loop in the file, so any report over 1000 rows is **silently truncated**. Two of the
+>    consumer's production campaigns already exceed it.
+> 2. **Metrics zero-fill.** `_parse_metrics` defaults every field to `0`, so a renamed or dropped Apple key
+>    lands `0` instead of raising — an invisible failure that downstream validation cannot catch.
+>
+> Driven by `bickster_os` (ASA Pass 2), which will consume this SDK **wholesale** and needs money exact to
+> the cent. **Breaking the `apple-search-ads-save` donor project is explicitly accepted.** No deadline —
+> the consumer is deliberately gated on this release, so prefer the correct fix over the fast one.
+
 ## Repository Overview
 
 This is a Python client library for Apple Search Ads API v5. The main package is `apple_search_ads` located in `src/apple_search_ads/`.

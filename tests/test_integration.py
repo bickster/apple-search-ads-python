@@ -313,8 +313,11 @@ class TestAppleSearchAdsIntegration:
             for col in expected_columns:
                 assert col in df.columns
 
-            # Verify data types
-            assert df["spend"].dtype == "float64"
+            # Verify data types: spend is exact Decimal in v3 (object dtype)
+            from decimal import Decimal
+
+            assert df["spend"].dtype == "object"
+            assert all(isinstance(value, Decimal) for value in df["spend"])
             assert df["impressions"].dtype in ["int64", "float64"]
 
     @pytest.mark.slow

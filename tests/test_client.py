@@ -3,6 +3,7 @@ Unit tests for Apple Search Ads Client.
 """
 
 import pytest
+from decimal import Decimal
 from unittest.mock import Mock, patch, mock_open
 import pandas as pd
 from datetime import datetime
@@ -10,6 +11,46 @@ import time
 import requests
 
 from apple_search_ads import AppleSearchAdsClient
+
+
+def modern_day_metrics(**overrides):
+    """A complete non-legacy day row satisfying strict (v3) parsing."""
+    metrics = {
+        "impressions": 0,
+        "taps": 0,
+        "totalInstalls": 0,
+        "totalNewDownloads": 0,
+        "totalRedownloads": 0,
+        "tapInstalls": 0,
+        "viewInstalls": 0,
+        "tapNewDownloads": 0,
+        "tapRedownloads": 0,
+        "viewNewDownloads": 0,
+        "viewRedownloads": 0,
+        "localSpend": {"amount": "0", "currency": "USD"},
+    }
+    metrics.update(overrides)
+    return metrics
+
+
+def legacy_day_metrics(**overrides):
+    """A complete legacy day row satisfying strict (v3) parsing."""
+    metrics = {
+        "impressions": 0,
+        "taps": 0,
+        "installs": 0,
+        "newDownloads": 0,
+        "redownloads": 0,
+        "tapInstalls": 0,
+        "viewInstalls": 0,
+        "tapNewDownloads": 0,
+        "tapRedownloads": 0,
+        "viewNewDownloads": 0,
+        "viewRedownloads": 0,
+        "localSpend": {"amount": "0", "currency": "USD"},
+    }
+    metrics.update(overrides)
+    return metrics
 
 
 class TestAppleSearchAdsClient:
@@ -838,18 +879,18 @@ class TestAppleSearchAdsClient:
                                 "adamId": "123456",
                             },
                             "granularity": [
-                                {
-                                    "date": "2024-01-01",
-                                    "impressions": 1000,
-                                    "taps": 50,
-                                    "totalInstalls": 10,
-                                    "totalNewDownloads": 6,
-                                    "totalRedownloads": 4,
-                                    "latOnInstalls": 8,
-                                    "latOffInstalls": 2,
-                                    "localSpend": {"amount": 100.0, "currency": "USD"},
-                                    "avgCPM": {"amount": 5.0, "currency": "USD"},
-                                }
+                                modern_day_metrics(
+                                    date="2024-01-01",
+                                    impressions=1000,
+                                    taps=50,
+                                    totalInstalls=10,
+                                    totalNewDownloads=6,
+                                    totalRedownloads=4,
+                                    latOnInstalls=8,
+                                    latOffInstalls=2,
+                                    localSpend={"amount": "100.00", "currency": "USD"},
+                                    avgCPM={"amount": "5.00", "currency": "USD"},
+                                )
                             ],
                         }
                     ]
@@ -865,14 +906,14 @@ class TestAppleSearchAdsClient:
         assert not df.empty
         assert len(df) == 1
         assert df.iloc[0]["campaign_name"] == "Test Campaign"
-        assert df.iloc[0]["spend"] == 100.0
+        assert df.iloc[0]["spend"] == Decimal("100.00")
         assert df.iloc[0]["adam_id"] == "123456"
         # Verify new metrics fields
         assert df.iloc[0]["new_downloads"] == 6
         assert df.iloc[0]["redownloads"] == 4
         assert df.iloc[0]["lat_on_installs"] == 8
         assert df.iloc[0]["lat_off_installs"] == 2
-        assert df.iloc[0]["avg_cpm"] == 5.0
+        assert df.iloc[0]["avg_cpm"] == Decimal("5.00")
 
     @patch.object(AppleSearchAdsClient, "get_all_organizations")
     @patch.object(AppleSearchAdsClient, "get_campaign_report")
@@ -980,13 +1021,13 @@ class TestAppleSearchAdsClient:
                         {
                             "metadata": {"campaignId": "1"},
                             "granularity": [
-                                {
-                                    "date": "2024-01-01",
-                                    "impressions": 100,
-                                    "taps": 10,
-                                    "totalInstalls": 1,
-                                    "localSpend": {"amount": 10.0, "currency": "USD"},
-                                }
+                                modern_day_metrics(
+                                    date="2024-01-01",
+                                    impressions=100,
+                                    taps=10,
+                                    totalInstalls=1,
+                                    localSpend={"amount": "10.00", "currency": "USD"},
+                                )
                             ],
                         }
                     ]
@@ -1052,13 +1093,13 @@ class TestAppleSearchAdsClient:
                             "adamId": "999888",
                         },
                         "granularity": [
-                            {
-                                "date": "2024-01-01",
-                                "impressions": 200,
-                                "taps": 20,
-                                "totalInstalls": 2,
-                                "localSpend": {"amount": 20.0, "currency": "USD"},
-                            }
+                            modern_day_metrics(
+                                date="2024-01-01",
+                                impressions=200,
+                                taps=20,
+                                totalInstalls=2,
+                                localSpend={"amount": "20.00", "currency": "USD"},
+                            )
                         ],
                     }
                 ]
@@ -1085,12 +1126,12 @@ class TestAppleSearchAdsClient:
                             "campaignId": "1",
                             "campaignName": "Legacy Campaign",
                         },
-                        "metrics": {
-                            "impressions": 300,
-                            "taps": 30,
-                            "totalInstalls": 3,
-                            "localSpend": {"amount": 30.0, "currency": "USD"},
-                        },
+                        "metrics": legacy_day_metrics(
+                            impressions=300,
+                            taps=30,
+                            installs=3,
+                            localSpend={"amount": "30.00", "currency": "USD"},
+                        ),
                     }
                 ]
             }
@@ -1101,7 +1142,7 @@ class TestAppleSearchAdsClient:
         assert not df.empty
         assert len(df) == 1
         assert df.iloc[0]["campaign_name"] == "Legacy Campaign"
-        assert df.iloc[0]["spend"] == 30.0
+        assert df.iloc[0]["spend"] == Decimal("30.00")
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_campaign_report_empty_rows(self, mock_make_request, client):
@@ -1115,8 +1156,9 @@ class TestAppleSearchAdsClient:
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_campaign_report_with_null_nested_fields(self, mock_make_request, client):
-        """Test campaign report handles None values in nested fields like totalAvgCPI."""
+        """Test campaign report handles None nested fields with strict=False (v2 zero-fill)."""
         client.org_id = "123"
+        client.strict = False
         mock_make_request.return_value = {
             "data": {
                 "reportingDataResponse": {
@@ -1352,13 +1394,13 @@ class TestAppleSearchAdsClient:
                                 "adGroupStatus": "ENABLED",
                             },
                             "granularity": [
-                                {
-                                    "date": "2024-01-01",
-                                    "impressions": 500,
-                                    "taps": 25,
-                                    "totalInstalls": 5,
-                                    "localSpend": {"amount": 50.0, "currency": "USD"},
-                                }
+                                modern_day_metrics(
+                                    date="2024-01-01",
+                                    impressions=500,
+                                    taps=25,
+                                    totalInstalls=5,
+                                    localSpend={"amount": "50.00", "currency": "USD"},
+                                )
                             ],
                         }
                     ]
@@ -1373,7 +1415,7 @@ class TestAppleSearchAdsClient:
         assert df.iloc[0]["adgroup_name"] == "Test Ad Group"
         assert df.iloc[0]["adgroup_id"] == "ag1"
         assert df.iloc[0]["campaign_id"] == "campaign123"
-        assert df.iloc[0]["spend"] == 50.0
+        assert df.iloc[0]["spend"] == Decimal("50.00")
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_adgroup_report_legacy_format(self, mock_make_request, client):
@@ -1389,12 +1431,12 @@ class TestAppleSearchAdsClient:
                             "adGroupName": "Legacy Ad Group",
                             "adGroupStatus": "PAUSED",
                         },
-                        "metrics": {
-                            "impressions": 200,
-                            "taps": 10,
-                            "installs": 2,
-                            "localSpend": {"amount": 25.0, "currency": "USD"},
-                        },
+                        "metrics": legacy_day_metrics(
+                            impressions=200,
+                            taps=10,
+                            installs=2,
+                            localSpend={"amount": "25.00", "currency": "USD"},
+                        ),
                     }
                 ]
             }
@@ -1406,7 +1448,7 @@ class TestAppleSearchAdsClient:
         assert len(df) == 1
         assert df.iloc[0]["adgroup_name"] == "Legacy Ad Group"
         assert df.iloc[0]["adgroup_status"] == "PAUSED"
-        assert df.iloc[0]["spend"] == 25.0
+        assert df.iloc[0]["spend"] == Decimal("25.00")
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_adgroup_report_empty(self, mock_make_request, client):
@@ -1448,13 +1490,13 @@ class TestAppleSearchAdsClient:
                                 "bidAmount": {"amount": 1.50, "currency": "USD"},
                             },
                             "granularity": [
-                                {
-                                    "date": "2024-01-01",
-                                    "impressions": 100,
-                                    "taps": 10,
-                                    "totalInstalls": 2,
-                                    "localSpend": {"amount": 15.0, "currency": "USD"},
-                                }
+                                modern_day_metrics(
+                                    date="2024-01-01",
+                                    impressions=100,
+                                    taps=10,
+                                    totalInstalls=2,
+                                    localSpend={"amount": "15.00", "currency": "USD"},
+                                )
                             ],
                         }
                     ]
@@ -1472,7 +1514,7 @@ class TestAppleSearchAdsClient:
         assert df.iloc[0]["bid_amount"] == 1.50
         assert df.iloc[0]["campaign_id"] == "campaign123"
         assert df.iloc[0]["adgroup_id"] == "ag1"
-        assert df.iloc[0]["spend"] == 15.0
+        assert df.iloc[0]["spend"] == Decimal("15.00")
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_keyword_report_legacy_format(self, mock_make_request, client):
@@ -1491,12 +1533,12 @@ class TestAppleSearchAdsClient:
                             "adGroupId": "ag1",
                             "bidAmount": {"amount": 2.00, "currency": "USD"},
                         },
-                        "metrics": {
-                            "impressions": 50,
-                            "taps": 5,
-                            "installs": 1,
-                            "localSpend": {"amount": 10.0, "currency": "USD"},
-                        },
+                        "metrics": legacy_day_metrics(
+                            impressions=50,
+                            taps=5,
+                            installs=1,
+                            localSpend={"amount": "10.00", "currency": "USD"},
+                        ),
                     }
                 ]
             }
@@ -1509,7 +1551,7 @@ class TestAppleSearchAdsClient:
         assert df.iloc[0]["keyword"] == "legacy keyword"
         assert df.iloc[0]["match_type"] == "BROAD"
         assert df.iloc[0]["bid_amount"] == 2.00
-        assert df.iloc[0]["spend"] == 10.0
+        assert df.iloc[0]["spend"] == Decimal("10.00")
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_keyword_report_no_bid_amount(self, mock_make_request, client):
@@ -1528,13 +1570,13 @@ class TestAppleSearchAdsClient:
                                 "adGroupId": "ag1",
                             },
                             "granularity": [
-                                {
-                                    "date": "2024-01-01",
-                                    "impressions": 100,
-                                    "taps": 10,
-                                    "totalInstalls": 2,
-                                    "localSpend": {"amount": 15.0, "currency": "USD"},
-                                }
+                                modern_day_metrics(
+                                    date="2024-01-01",
+                                    impressions=100,
+                                    taps=10,
+                                    totalInstalls=2,
+                                    localSpend={"amount": "15.00", "currency": "USD"},
+                                )
                             ],
                         }
                     ]
@@ -1587,13 +1629,13 @@ class TestAppleSearchAdsClient:
                                 "adGroupId": "ag1",
                             },
                             "granularity": [
-                                {
-                                    "date": "2024-01-01",
-                                    "impressions": 100,
-                                    "taps": 10,
-                                    "totalInstalls": 2,
-                                    "localSpend": {"amount": 15.0, "currency": "USD"},
-                                }
+                                modern_day_metrics(
+                                    date="2024-01-01",
+                                    impressions=100,
+                                    taps=10,
+                                    totalInstalls=2,
+                                    localSpend={"amount": "15.00", "currency": "USD"},
+                                )
                             ],
                         }
                     ]
@@ -1612,7 +1654,7 @@ class TestAppleSearchAdsClient:
         assert df.iloc[0]["match_type"] == "EXACT"
         assert df.iloc[0]["campaign_id"] == "campaign123"
         assert df.iloc[0]["adgroup_id"] == "ag1"
-        assert df.iloc[0]["spend"] == 15.0
+        assert df.iloc[0]["spend"] == Decimal("15.00")
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_search_term_report_legacy_format(self, mock_make_request, client):
@@ -1631,12 +1673,12 @@ class TestAppleSearchAdsClient:
                             "matchType": "BROAD",
                             "adGroupId": "ag1",
                         },
-                        "metrics": {
-                            "impressions": 50,
-                            "taps": 5,
-                            "installs": 1,
-                            "localSpend": {"amount": 10.0, "currency": "USD"},
-                        },
+                        "metrics": modern_day_metrics(
+                            impressions=50,
+                            taps=5,
+                            totalInstalls=1,
+                            localSpend={"amount": "10.00", "currency": "USD"},
+                        ),
                     }
                 ]
             }
@@ -1651,7 +1693,7 @@ class TestAppleSearchAdsClient:
         assert df.iloc[0]["search_term"] == "legacy search term"
         assert df.iloc[0]["search_term_source"] == "AUTO"
         assert df.iloc[0]["match_type"] == "BROAD"
-        assert df.iloc[0]["spend"] == 10.0
+        assert df.iloc[0]["spend"] == Decimal("10.00")
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_search_term_report_empty(self, mock_make_request, client):
@@ -1693,13 +1735,13 @@ class TestAppleSearchAdsClient:
                                 "adGroupId": "ag1",
                             },
                             "granularity": [
-                                {
-                                    "date": "2024-01-01",
-                                    "impressions": 50,
-                                    "taps": 5,
-                                    "totalInstalls": 1,
-                                    "localSpend": {"amount": 10.0, "currency": "USD"},
-                                }
+                                modern_day_metrics(
+                                    date="2024-01-01",
+                                    impressions=50,
+                                    taps=5,
+                                    totalInstalls=1,
+                                    localSpend={"amount": "10.00", "currency": "USD"},
+                                )
                             ],
                         }
                     ]
@@ -1716,7 +1758,7 @@ class TestAppleSearchAdsClient:
         assert df.iloc[0]["search_term"] == "adgroup search term"
         assert df.iloc[0]["search_term_source"] == "AUTO"
         assert df.iloc[0]["adgroup_id"] == "ag1"
-        assert df.iloc[0]["spend"] == 10.0
+        assert df.iloc[0]["spend"] == Decimal("10.00")
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_adgroup_search_term_report_empty(self, mock_make_request, client):

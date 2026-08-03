@@ -125,6 +125,21 @@ report_df = client.get_campaign_report(
 print(report_df[['date', 'campaign_name', 'spend', 'installs', 'taps']])
 ```
 
+Notes on report behavior (v3):
+
+- Reports paginate automatically — results over Apple's 1000-row page limit are fetched
+  completely, never truncated.
+- Money columns (`spend`, `avg_cpa`, `avg_cpt`, `avg_cpm`) are exact `decimal.Decimal`
+  values; absent ratios (`ttr`, `conversion_rate`, `tap_install_rate`) are `None`, not `0`.
+- In strict mode (the default), a missing required metric raises `MissingMetricError`
+  instead of silently filling `0`. Pass `strict=False` to the client for legacy v2
+  zero-fill behavior (migration aid only).
+- Each `get_*_report()` method has a `get_*_report_raw()` counterpart returning the fully
+  paginated raw API rows (`List[Dict]`, money as original strings) for pipelines that do
+  their own validation.
+- Requests set `returnRecordsWithNoMetrics: False`, so entities with no activity in the
+  date range return no row at all — "no row" does not mean the entity doesn't exist.
+
 ### Get ad group performance report
 
 ```python
