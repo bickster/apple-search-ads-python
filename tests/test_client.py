@@ -293,19 +293,22 @@ class TestAppleSearchAdsClient:
             with pytest.raises(requests.exceptions.HTTPError):
                 client._make_request("https://test.url")
 
+    @patch.object(AppleSearchAdsClient, "_retry_sleep")
     @patch("requests.request")
-    def test_make_request_rate_limit_error(self, mock_request, client):
-        """Test API request with rate limit error (429)."""
+    def test_make_request_rate_limit_error(self, mock_request, mock_sleep, client):
+        """A persistent 429 still raises once the retry budget is spent."""
         mock_response = Mock()
         mock_response.status_code = 429
         mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
-            "429 Too Many Requests"
+            "429 Too Many Requests", response=mock_response
         )
         mock_request.return_value = mock_response
 
         with patch.object(client, "_get_headers", return_value={"test": "header"}):
             with pytest.raises(requests.exceptions.HTTPError):
                 client._make_request("https://test.url")
+
+        assert mock_request.call_count == 3  # initial + 2 retries, then raises
 
     @patch("requests.request")
     def test_make_request_server_error(self, mock_request, client):
@@ -383,6 +386,141 @@ class TestAppleSearchAdsClient:
         client._download_impression_share_report("https://example.com/report")
 
         assert mock_get.call_args.kwargs["timeout"] == 7.0
+
+    @patch.object(AppleSearchAdsClient, "_retry_sleep")
+    @patch("requests.request")
+    def test_retries_connect_timeout_then_succeeds(self, mock_request, mock_sleep, client):
+        """A transient ConnectTimeout is retried and the call succeeds."""
+        ok = Mock()
+        ok.json.return_value = {"data": "test"}
+        mock_request.side_effect = [requests.exceptions.ConnectTimeout("boom"), ok]
+
+        with patch.object(client, "_get_headers", return_value={}):
+            result = client._make_request("https://test.url")
+
+        assert result == {"data": "test"}
+        assert mock_request.call_count == 2
+        mock_sleep.assert_called_once_with(1.0)
+
+    @patch.object(AppleSearchAdsClient, "_retry_sleep")
+    @patch("requests.request")
+    def test_retries_502_then_succeeds(self, mock_request, mock_sleep, client):
+        """A transient 502 is retried."""
+        bad = Mock(status_code=502)
+        bad.raise_for_status.side_effect = requests.exceptions.HTTPError(response=bad)
+        ok = Mock()
+        ok.json.return_value = {"data": "test"}
+        mock_request.side_effect = [bad, ok]
+
+        with patch.object(client, "_get_headers", return_value={}):
+            result = client._make_request("https://test.url")
+
+        assert result == {"data": "test"}
+        assert mock_request.call_count == 2
+
+    @patch.object(AppleSearchAdsClient, "_retry_sleep")
+    @patch("requests.request")
+    def test_retries_429_then_succeeds(self, mock_request, mock_sleep, client):
+        """A server-side 429 is retried (the client-side throttle can't prevent these)."""
+        bad = Mock(status_code=429)
+        bad.raise_for_status.side_effect = requests.exceptions.HTTPError(response=bad)
+        ok = Mock()
+        ok.json.return_value = {"data": "test"}
+        mock_request.side_effect = [bad, ok]
+
+        with patch.object(client, "_get_headers", return_value={}):
+            result = client._make_request("https://test.url")
+
+        assert result == {"data": "test"}
+        assert mock_request.call_count == 2
+
+    @patch.object(AppleSearchAdsClient, "_retry_sleep")
+    @patch("requests.request")
+    def test_does_not_retry_404(self, mock_request, mock_sleep, client):
+        """Non-transient HTTP errors fail fast — retrying a 404 just delays the truth."""
+        bad = Mock(status_code=404)
+        bad.raise_for_status.side_effect = requests.exceptions.HTTPError(response=bad)
+        mock_request.return_value = bad
+
+        with patch.object(client, "_get_headers", return_value={}):
+            with pytest.raises(requests.exceptions.HTTPError):
+                client._make_request("https://test.url")
+
+        assert mock_request.call_count == 1
+        mock_sleep.assert_not_called()
+
+    @patch.object(AppleSearchAdsClient, "_retry_sleep")
+    @patch("requests.request")
+    def test_retry_budget_exhausted_raises_with_capped_backoff(
+        self, mock_request, mock_sleep, client
+    ):
+        """Default budget is 2 retries (3 attempts total); backoff is 1s then capped at 2s."""
+        mock_request.side_effect = requests.exceptions.ConnectTimeout("down")
+
+        with patch.object(client, "_get_headers", return_value={}):
+            with pytest.raises(requests.exceptions.ConnectTimeout):
+                client._make_request("https://test.url")
+
+        assert mock_request.call_count == 3
+        assert [c.args[0] for c in mock_sleep.call_args_list] == [1.0, 2.0]
+
+    @patch.object(AppleSearchAdsClient, "_retry_sleep")
+    @patch("requests.request")
+    def test_retries_zero_disables_retry(self, mock_request, mock_sleep, mock_credentials):
+        """retries=0 restores fail-fast on the first transient error."""
+        mock_request.side_effect = requests.exceptions.ConnectTimeout("down")
+
+        client = AppleSearchAdsClient(**mock_credentials, retries=0)
+        with patch.object(client, "_get_headers", return_value={}):
+            with pytest.raises(requests.exceptions.ConnectTimeout):
+                client._make_request("https://test.url")
+
+        assert mock_request.call_count == 1
+        mock_sleep.assert_not_called()
+
+    def test_default_retries_is_two(self, client):
+        assert client.retries == 2
+
+    @patch.object(AppleSearchAdsClient, "_retry_sleep")
+    @patch("requests.request")
+    def test_retry_budget_is_shared_across_report_pages(self, mock_request, mock_sleep, client):
+        """One paged fetch gets ONE retry budget, not a fresh budget per page —
+        a systemically-down Apple must not multiply retries by page count."""
+        client.org_id = "123"
+
+        def page_response(rows_start, rows_count, total):
+            resp = Mock()
+            resp.json.return_value = {
+                "data": {
+                    "reportingDataResponse": {
+                        "row": [
+                            {"metadata": {"campaignId": str(rows_start + i)}}
+                            for i in range(rows_count)
+                        ]
+                    }
+                },
+                "pagination": {
+                    "totalResults": total,
+                    "startIndex": rows_start,
+                    "itemsPerPage": rows_count,
+                },
+            }
+            return resp
+
+        # Page 1 consumes both retries, then succeeds; page 2's first transient
+        # failure finds an empty budget and must raise immediately.
+        mock_request.side_effect = [
+            requests.exceptions.ConnectTimeout("blip"),
+            requests.exceptions.ConnectTimeout("blip"),
+            page_response(0, 1000, 1500),
+            requests.exceptions.ConnectTimeout("blip"),
+        ]
+
+        with patch.object(client, "_get_headers", return_value={}):
+            with pytest.raises(requests.exceptions.ConnectTimeout):
+                client.get_campaign_report_raw("2024-01-01", "2024-01-31")
+
+        assert mock_request.call_count == 4
 
     @patch.object(AppleSearchAdsClient, "_make_request")
     def test_get_all_organizations(self, mock_make_request, client):

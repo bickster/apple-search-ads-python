@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Bounded retry for transient failures.** Connection errors, timeouts, and HTTP
+  429/502/503/504 are now retried with capped backoff (1s, then 2s); all other errors
+  still fail immediately. Configure via the new `retries` client parameter (default 2;
+  0 disables). The budget is per public call and spans a whole paged fetch — a
+  systemically-down API cannot multiply retries by page count. **Note: this changes
+  failure timing** — a persistently failing call now takes up to ~3 attempts plus ~3s
+  of backoff before raising, where 3.1.0 raised on the first error. Cross-campaign
+  circuit breaking is deliberately left to callers, who own that loop and its
+  alerting policy.
+
 ### Fixed
 - `apple_search_ads.__version__` was hardcoded to "0.1.0" and had drifted from the real
   release version since the first release (`release.sh` bumps only `setup.py` and

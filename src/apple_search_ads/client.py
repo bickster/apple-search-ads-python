@@ -17,6 +17,16 @@ from ratelimit import limits, sleep_and_retry
 from .exceptions import MissingMetricError, PaginationError
 
 
+class _RetryBudget:
+    """Mutable retry allowance shared across the requests of one public call.
+
+    Paged fetches pass one budget through every page so a systemically-down
+    API cannot multiply retries by page count."""
+
+    def __init__(self, remaining: int):
+        self.remaining = remaining
+
+
 class AppleSearchAdsClient:
     """
     Client for Apple Search Ads API v5.
@@ -40,6 +50,12 @@ class AppleSearchAdsClient:
             requests. None disables the timeout entirely — requests will then
             block indefinitely on a stalled connection, as in versions <= 3.0.0.
             A tripped timeout raises requests.exceptions.Timeout.
+        retries: Retries allowed per public call for transient failures only —
+            connection errors, timeouts, and HTTP 429/502/503/504 (default 2,
+            with backoff of 1s then 2s, capped). Other errors fail immediately.
+            The budget spans a whole paged fetch, not each page. 0 disables
+            retries. Cross-campaign circuit breaking is deliberately left to
+            the caller, which owns that loop.
 
     Example:
         >>> client = AppleSearchAdsClient(
@@ -63,6 +79,7 @@ class AppleSearchAdsClient:
         org_id: Optional[str] = None,
         strict: bool = True,
         timeout: Optional[Union[float, Tuple[float, float]]] = 30.0,
+        retries: int = 2,
     ):
         # Try to get credentials from parameters, then environment variables
         self.client_id = client_id or os.environ.get("APPLE_SEARCH_ADS_CLIENT_ID")
@@ -88,6 +105,7 @@ class AppleSearchAdsClient:
         self.org_id = org_id
         self.strict = strict
         self.timeout = timeout
+        self.retries = retries
         self._token: Optional[str] = None
         self._token_expiry: Optional[float] = None
 
@@ -176,17 +194,20 @@ class AppleSearchAdsClient:
 
         raise ValueError("No organization found for this account")
 
+    _RETRYABLE_STATUSES = (429, 502, 503, 504)
+    _BACKOFF_CAP_SECONDS = 2.0
+
     @sleep_and_retry
     @limits(calls=10, period=1)  # Apple Search Ads rate limit
-    def _make_request(
+    def _send_request(
         self,
         url: str,
-        method: str = "GET",
-        json_data: Optional[Dict] = None,
-        params: Optional[Dict] = None,
-        include_org_context: bool = True,
+        method: str,
+        json_data: Optional[Union[Dict, List]],
+        params: Optional[Dict],
+        include_org_context: bool,
     ) -> Dict[str, Any]:
-        """Make a rate-limited request to the API."""
+        """Send a single rate-limited request to the API."""
         response = requests.request(
             method=method,
             url=url,
@@ -197,6 +218,46 @@ class AppleSearchAdsClient:
         )
         response.raise_for_status()
         return response.json()
+
+    @staticmethod
+    def _is_retryable_error(exc: requests.exceptions.RequestException) -> bool:
+        if isinstance(exc, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+            return True
+        if isinstance(exc, requests.exceptions.HTTPError) and exc.response is not None:
+            return exc.response.status_code in AppleSearchAdsClient._RETRYABLE_STATUSES
+        return False
+
+    @staticmethod
+    def _retry_sleep(seconds: float) -> None:
+        """Backoff sleep, separated from the rate limiter's sleep for testability."""
+        time.sleep(seconds)
+
+    def _make_request(
+        self,
+        url: str,
+        method: str = "GET",
+        json_data: Optional[Union[Dict, List]] = None,
+        params: Optional[Dict] = None,
+        include_org_context: bool = True,
+        retry_budget: Optional[_RetryBudget] = None,
+    ) -> Dict[str, Any]:
+        """Make an API request, retrying transient failures within a bounded budget.
+
+        Only connection errors, timeouts, and HTTP 429/502/503/504 are retried;
+        everything else fails fast. When retry_budget is shared (paged fetches),
+        retries are bounded across the whole fetch, not per page.
+        """
+        budget = retry_budget if retry_budget is not None else _RetryBudget(self.retries)
+        attempt = 0
+        while True:
+            try:
+                return self._send_request(url, method, json_data, params, include_org_context)
+            except requests.exceptions.RequestException as exc:
+                if not self._is_retryable_error(exc) or budget.remaining <= 0:
+                    raise
+                budget.remaining -= 1
+                self._retry_sleep(min(2.0**attempt, self._BACKOFF_CAP_SECONDS))
+                attempt += 1
 
     def _parse_date_param(self, date: Union[datetime, str]) -> datetime:
         """Convert string date to datetime if needed."""
@@ -273,11 +334,14 @@ class AppleSearchAdsClient:
 
         rows: List[Dict[str, Any]] = []
         offset = 0
+        retry_budget = _RetryBudget(self.retries)
         while True:
             request_data = self._build_report_request(
                 start_dt, end_dt, granularity, time_zone, offset=offset, limit=limit
             )
-            response = self._make_request(url, method="POST", json_data=request_data)
+            response = self._make_request(
+                url, method="POST", json_data=request_data, retry_budget=retry_budget
+            )
             page_rows = self._extract_rows_from_response(response)
             pagination = self._extract_pagination_from_response(response)
             rows.extend(page_rows)
@@ -539,6 +603,7 @@ class AppleSearchAdsClient:
         keywords: List[Dict[str, Any]] = []
         offset = 0
         limit = 1000
+        retry_budget = _RetryBudget(self.retries)
         while True:
             request_data: Dict[str, Any] = {
                 "pagination": {"offset": offset, "limit": limit},
@@ -547,7 +612,9 @@ class AppleSearchAdsClient:
             if conditions:
                 request_data["conditions"] = conditions
 
-            response = self._make_request(url, method="POST", json_data=request_data)
+            response = self._make_request(
+                url, method="POST", json_data=request_data, retry_budget=retry_budget
+            )
             page = response.get("data", []) or []
             keywords.extend(page)
 
