@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-08-04
+
 ### Added
 - **Bounded retry for transient failures.** Connection errors, timeouts, and HTTP
   429/502/503/504 are now retried with capped backoff (1s, then 2s); all other errors
