@@ -7,10 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [4.0.1] - Unreleased (retitle with the release date when tagging)
+## [4.1.0] - Unreleased (retitle with the release date when tagging)
 
-Fixes from an independent review of 4.0.0. Each one is pinned by a test in
-`tests/test_review_fixes.py` that fails on 4.0.0.
+Adds `group_by` to search term reports, plus fixes from an independent review of 4.0.0.
+Each fix is pinned by a test in `tests/test_review_fixes.py` that fails on 4.0.0.
+
+### Added
+- **`group_by` on search term reports.** `get_search_term_report`,
+  `get_adgroup_search_term_report` and their `_raw` variants accept
+  `group_by=["countryOrRegion"]`, which returns one row per search term per country
+  with `country_or_region` filled in, as v5's `groupBy` did. Validated live against
+  v5's grouped output: 132/132 rows identical across 21 countries, and 190/190 on a
+  second campaign, including the low-volume flag. Omitting `group_by` leaves the
+  request unchanged.
 
 ### Fixed
 - **One unreadable ad account no longer fails every all-accounts total.** 4.0.0 added a

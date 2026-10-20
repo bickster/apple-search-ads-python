@@ -120,6 +120,9 @@ codes, e.g. `AD_GROUPS_NOT_RUNNING` instead of `NO_AVAILABLE_AD_GROUPS`, and
 - **Search-term low-volume rows:** v1 dropped v5's `other` flag. A null `searchTermText`
   marks the same rows (14/14 matched), so `is_low_volume` and `"(Low volume terms)"`
   behave as before.
+- **Per-country search terms:** pass `group_by=["countryOrRegion"]` to the search term
+  methods (since 4.1.0). Code that hand-built v5 `groupBy` requests can switch to it;
+  it matched v5 row for row on a live multi-country campaign.
 - **Metric names:** `avgCPT`/`avgCPM` became `cpt`/`cpm`. The `avg_cpt`/`avg_cpm` columns
   are unchanged.
 - **`*_raw` methods** return v1 rows (`metadata`, `totalMetrics`, `granularMetrics`), not

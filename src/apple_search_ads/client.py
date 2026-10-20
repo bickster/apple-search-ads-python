@@ -306,6 +306,7 @@ class AppleSearchAdsClient:
         offset: int = 0,
         limit: int = 1000,
         filters: Optional[List[Dict[str, Any]]] = None,
+        group_by: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Build standard report request data.
 
@@ -326,6 +327,8 @@ class AppleSearchAdsClient:
         }
         if filters:
             request["filters"] = filters
+        if group_by:
+            request["groupBy"] = list(group_by)
         return request
 
     def _extract_rows_from_response(self, response: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -421,6 +424,7 @@ class AppleSearchAdsClient:
         limit: int = 1000,
         paginate: bool = True,
         filters: Optional[List[Dict[str, Any]]] = None,
+        group_by: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Fetch all rows for a report, following pagination until complete."""
         start_dt = self._parse_date_param(start_date)
@@ -428,7 +432,7 @@ class AppleSearchAdsClient:
 
         def build(offset: int, page_size: int) -> Dict[str, Any]:
             return self._build_report_request(
-                start_dt, end_dt, granularity, time_zone, offset, page_size, filters
+                start_dt, end_dt, granularity, time_zone, offset, page_size, filters, group_by
             )
 
         return self._fetch_paged(url, build, limit=limit, paginate=paginate)
@@ -1243,6 +1247,7 @@ class AppleSearchAdsClient:
         campaign_id: str,
         start_date: Union[datetime, str],
         end_date: Union[datetime, str],
+        group_by: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get search term performance report as raw API rows.
@@ -1250,6 +1255,8 @@ class AppleSearchAdsClient:
         Returns every row across all pages, exactly as Apple sent them —
         no metric parsing, money amounts left as their original JSON strings.
         Uses ORTZ (Organization Reference Time Zone) as required by the API.
+        group_by: optional dimensions, e.g. ["countryOrRegion"] for one row per
+        search term per country (as v5's groupBy did).
         """
         if not self.org_id:
             self._get_org_id()
@@ -1261,6 +1268,7 @@ class AppleSearchAdsClient:
             end_date,
             time_zone="ORTZ",
             filters=self._search_term_filters(campaign_id),
+            group_by=group_by,
         )
 
     def get_search_term_report(
@@ -1268,6 +1276,7 @@ class AppleSearchAdsClient:
         campaign_id: str,
         start_date: Union[datetime, str],
         end_date: Union[datetime, str],
+        group_by: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """
         Get search term performance report for a specific campaign.
@@ -1276,6 +1285,9 @@ class AppleSearchAdsClient:
             campaign_id: The campaign ID to get search term reports for
             start_date: Start date for the report (datetime or YYYY-MM-DD string)
             end_date: End date for the report (datetime or YYYY-MM-DD string)
+            group_by: Optional dimensions, e.g. ["countryOrRegion"] to split each
+                search term by country (filling country_or_region). Matched v5's
+                groupBy row for row on a live multi-country campaign (132/132).
 
         Returns:
             DataFrame with search term performance metrics including:
@@ -1293,7 +1305,7 @@ class AppleSearchAdsClient:
         start_date = self._parse_date_param(start_date)
         end_date = self._parse_date_param(end_date)
 
-        rows = self.get_search_term_report_raw(campaign_id, start_date, end_date)
+        rows = self.get_search_term_report_raw(campaign_id, start_date, end_date, group_by)
         return self._report_rows_to_df(
             rows,
             lambda row, metadata: self._parse_search_term_row(row, metadata, campaign_id),
@@ -1306,6 +1318,7 @@ class AppleSearchAdsClient:
         adgroup_id: str,
         start_date: Union[datetime, str],
         end_date: Union[datetime, str],
+        group_by: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get ad group search term performance report as raw API rows.
@@ -1313,6 +1326,8 @@ class AppleSearchAdsClient:
         Returns every row across all pages, exactly as Apple sent them —
         no metric parsing, money amounts left as their original JSON strings.
         Uses ORTZ (Organization Reference Time Zone) as required by the API.
+        group_by: optional dimensions, e.g. ["countryOrRegion"] for one row per
+        search term per country (as v5's groupBy did).
         """
         if not self.org_id:
             self._get_org_id()
@@ -1324,6 +1339,7 @@ class AppleSearchAdsClient:
             end_date,
             time_zone="ORTZ",
             filters=self._search_term_filters(campaign_id, adgroup_id),
+            group_by=group_by,
         )
 
     def get_adgroup_search_term_report(
@@ -1332,6 +1348,7 @@ class AppleSearchAdsClient:
         adgroup_id: str,
         start_date: Union[datetime, str],
         end_date: Union[datetime, str],
+        group_by: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """
         Get search term performance report for a specific ad group.
@@ -1343,6 +1360,9 @@ class AppleSearchAdsClient:
             adgroup_id: The ad group ID to get search term reports for
             start_date: Start date for the report (datetime or YYYY-MM-DD string)
             end_date: End date for the report (datetime or YYYY-MM-DD string)
+            group_by: Optional dimensions, e.g. ["countryOrRegion"] to split each
+                search term by country (filling country_or_region). Matched v5's
+                groupBy row for row on a live multi-country campaign (132/132).
 
         Returns:
             DataFrame with search term performance metrics including:
@@ -1361,7 +1381,7 @@ class AppleSearchAdsClient:
         end_date = self._parse_date_param(end_date)
 
         rows = self.get_adgroup_search_term_report_raw(
-            campaign_id, adgroup_id, start_date, end_date
+            campaign_id, adgroup_id, start_date, end_date, group_by
         )
         return self._report_rows_to_df(
             rows,
