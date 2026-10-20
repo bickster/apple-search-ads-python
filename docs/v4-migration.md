@@ -53,6 +53,11 @@ v1 lists them. In 4.0:
   (`get_daily_spend*`). Each org dict carries `productFeatures`, where
   `APPSTORE_APP_AUTOMATED` marks a Basic account.
 - `include_basic=False` drops them everywhere and reproduces 3.x numbers exactly.
+- With no `org_id`, the client defaults to the first **non-Basic** account (since 4.0.1;
+  4.0.0 could pick a Basic one, so `include_basic=False` did not fully reproduce 3.x).
+- If one account's details can't be fetched, it is still included, with its spend
+  counted and its currency, time zone and payment model `None` (since 4.0.1). Its Basic
+  status is unknown, so it is kept even with `include_basic=False`.
 - `get_all_campaigns()` skips them, because v1 returns **403** to campaign queries on
   Basic accounts. Their spend still comes through the report-based methods.
   Calling `get_campaigns(org_id=<basic account>)` directly raises that 403.
@@ -133,8 +138,12 @@ v1 replaces v5's queued custom reports with a synchronous query.
   `max_wait` are ignored. `time_zone` must be `None` or `"UTC"`. `granularity="WEEKLY"`
   means v1's Sunday–Saturday weeks. When `adam_ids` is omitted, it uses every app
   promoted by the current org's campaigns, because v1 requires at least one.
-- Output keeps the v5 column names (`date`, `adamId`, `searchPopularity`) alongside v1's
-  (`day`, `promotedObjectId`, `searchPopularity1to5`).
+- Output keeps the v5 column names (`date`, `adamId` as an int, `searchPopularity`)
+  alongside v1's (`day`, `promotedObjectId`, `searchPopularity1to5`).
+- `granularity="WEEKLY"` needs a Sunday start date (since 4.0.1 the client raises
+  `ValueError` instead of sending a request Apple rejects).
+- Report type is v1's default, `FIRST_SLOT` (top ad position). Whether v5's custom
+  report used the same basis was not verified.
 - `create_impression_share_report()` and `get_impression_share_report()` raise
   `NotImplementedError`.
 

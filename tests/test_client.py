@@ -1863,8 +1863,8 @@ class TestAppleSearchAdsClient:
 
         df = client.get_impression_share_data(
             name="test",
-            start_date="2024-01-01",
-            end_date="2024-01-07",
+            start_date="2023-12-31",  # a Sunday: v1 weeks run Sunday-Saturday
+            end_date="2024-01-06",
             countries=["US"],
             adam_ids=["123"],
             granularity="WEEKLY",

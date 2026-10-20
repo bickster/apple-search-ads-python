@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.1] - Unreleased (retitle with the release date when tagging)
+
+Fixes from an independent review of 4.0.0. Each one is pinned by a test in
+`tests/test_review_fixes.py` that fails on 4.0.0.
+
+### Fixed
+- **One unreadable ad account no longer fails every all-accounts total.** 4.0.0 added a
+  per-account details lookup to `get_all_organizations()` with no error handling, so a
+  single 403 or 5xx made `get_daily_spend*` raise for every account. The account is now
+  kept, with its spend still counted and its currency, time zone and payment model
+  `None`, and a warning is printed. Failed lookups aren't cached, so the next call
+  retries. Because a failed account's Basic status is unknown, it is kept even with
+  `include_basic=False`.
+- **The default account is never a Basic account.** With no `org_id`, 4.0.0 used the
+  first ACL entry, which in v1 can be a Basic account, and v1 refuses campaign queries
+  on those (403). It now uses the first non-Basic account. Correction: the 4.0.0
+  migration notes said `include_basic=False` reproduces 3.x exactly, but that didn't
+  hold for calls without an `org_id` when a Basic account was listed first.
+- `get_daily_spend_by_app` could produce `app_id` values like `"1134998522.0"` when any
+  report row lacked an app (pandas turns the column into float). IDs are always plain
+  digit strings again.
+- `get_impression_share_data` returns `adamId` as an int, as in v5 (4.0.0 returned a
+  string). It now raises `ValueError` for `granularity="WEEKLY"` with a start date that
+  isn't a Sunday; v1 weeks run Sunday–Saturday and Apple would reject the request.
+- Campaign, ad group and keyword reports for a single day date any row that arrives
+  without per-day data with the requested day, instead of leaving `date=None` (which
+  the spend helpers then dropped). Apple documents that shape for single-day requests
+  without granularity; live DAILY single-day requests still return per-day data
+  (checked 2026-10-20), so this is a guard, not a behavior change.
+
 ## [4.0.0] - 2026-10-20
 
 **Migration note (breaking):** every call now goes to the Apple Ads Platform API v1, because
