@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is a Python client library for Apple Search Ads API v5. The main package is `apple_search_ads` located in `src/apple_search_ads/`.
+This is a Python client library for the Apple Ads Platform API v1 (v5 until 4.0; Apple sunsets v5 on 2027-01-26). The main package is `apple_search_ads` located in `src/apple_search_ads/`.
 
 ## Key Commands
 
