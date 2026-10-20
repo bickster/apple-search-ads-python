@@ -12,7 +12,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="apple-search-ads-client",
-    version="4.0.0",
+    version="4.1.0",
     author="Bickster LLC",
     author_email="support@bickster.com",
     description="A Python client for the Apple Ads Platform API (successor to Apple Search Ads API v5)",
