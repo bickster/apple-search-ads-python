@@ -1,6 +1,11 @@
 # Apple Search Ads Python Client
 
-A Python client library for Apple Search Ads API v5, providing a simple and intuitive interface for managing and reporting on Apple Search Ads campaigns.
+A Python client library for the Apple Ads Platform API v1, providing a simple and intuitive interface for managing and reporting on Apple Search Ads campaigns.
+
+> **4.0 moves to the Apple Ads Platform API.** Apple shuts down Campaign Management API v5 on
+> January 26, 2027; 3.x will stop working then. Public method signatures and return shapes are
+> unchanged and existing v5 API keys keep working, but totals now include Search Ads Basic spend
+> by default. Read [docs/v4-migration.md](docs/v4-migration.md) before upgrading.
 
 ## Features
 
@@ -191,39 +196,22 @@ auto_terms = search_term_report[search_term_report['search_term_source'] == 'AUT
 ### Get impression share report
 
 ```python
-# Impression share reports are async - they must be created, then polled for completion
-
-# Option 1: Use the convenience method (handles create, poll, download automatically)
+# The Platform API answers impression share queries directly (no report to poll)
 df = client.get_impression_share_data(
-    name="my_impression_report",
+    name="unused",  # kept for 3.x compatibility
     start_date="2024-01-01",
     end_date="2024-01-30",
-    granularity="DAILY",
+    granularity="DAILY",  # or "WEEKLY" (Sunday-Saturday weeks)
     countries=["US", "AU"],  # Optional: filter by countries
-    adam_ids=["1234567890"],  # Optional: filter by app IDs
-    time_zone="ORTZ",  # Optional: use org timezone
-    poll_interval=5,  # Seconds between status checks
-    max_wait=300  # Max seconds to wait for completion
+    adam_ids=["1234567890"],  # Optional: defaults to every app the org promotes
 )
 
 print(df[['appName', 'searchTerm', 'lowImpressionShare', 'highImpressionShare', 'rank']])
-
-# Option 2: Manual control over the process
-report = client.create_impression_share_report(
-    name="my_report",
-    start_date="2024-01-01",
-    end_date="2024-01-30",
-    granularity="DAILY",
-    countries=["US"]
-)
-print(f"Report ID: {report['id']}, State: {report['state']}")
-
-# Poll for completion
-status = client.get_impression_share_report(report['id'])
-print(f"State: {status['state']}")  # QUEUED, PROCESSING, or COMPLETED
 ```
 
-Note: Impression share reports have a limit of 10 reports per 24 hours and max 30 day range.
+Note: impression share is UTC-only in the Platform API; `time_zone` must be `None` or `"UTC"`.
+`create_impression_share_report()` and `get_impression_share_report()` raise
+`NotImplementedError` in 4.0 because v1 has no queued custom reports.
 
 ### Track spend by app
 
@@ -304,7 +292,11 @@ AppleSearchAdsClient(
     key_id: Optional[str] = None,
     private_key_path: Optional[str] = None,
     private_key_content: Optional[str] = None,
-    org_id: Optional[str] = None
+    org_id: Optional[str] = None,  # an ad account id (same values as v5 orgIds)
+    strict: bool = True,
+    timeout: Optional[Union[float, Tuple[float, float]]] = 30.0,
+    retries: int = 2,
+    include_basic: bool = True,  # False reproduces 3.x totals (no Search Ads Basic spend)
 )
 ```
 
@@ -328,9 +320,14 @@ AppleSearchAdsClient(
 - `get_daily_spend_by_app(start_date, end_date, fetch_all_orgs=True)` - Get spend grouped by app
 
 **Timezone Options:**
-- `None` (default) - Uses UTC
+- `None` (default) - The API default, ORTZ: each ad account's own time zone. (Earlier
+  READMEs said the default was UTC; a live comparison on 2026-10-19 showed v5's default
+  also behaved as ORTZ.)
 - `"ORTZ"` - Organization Reference Time Zone (matches Apple Ads UI)
 - `"UTC"` - Coordinated Universal Time
+
+With `fetch_all_orgs=True`, rows from accounts in different time zones are summed per
+date. Search Ads Basic accounts may use a different zone (UTC) from advanced ones.
 
 ```python
 # Use organization timezone for consistent reporting with Apple Ads UI
@@ -339,9 +336,8 @@ report = client.get_campaign_report(start_date, end_date, time_zone="ORTZ")
 
 #### Impression Share Reports
 
-- `create_impression_share_report(name, start_date, end_date, granularity="DAILY", countries=None, adam_ids=None, time_zone=None)` - Create an async impression share report
-- `get_impression_share_report(report_id)` - Get report status and info
-- `get_impression_share_data(name, start_date, end_date, granularity="DAILY", countries=None, adam_ids=None, time_zone=None, poll_interval=5, max_wait=300)` - Convenience method: create, poll, and download
+- `get_impression_share_data(name, start_date, end_date, granularity="DAILY", countries=None, adam_ids=None, time_zone=None, poll_interval=5, max_wait=300)` - Query impression share (`name`, `poll_interval`, `max_wait` are ignored)
+- `create_impression_share_report(...)`, `get_impression_share_report(...)` - Removed in 4.0; raise `NotImplementedError`
 
 #### Campaign Management
 

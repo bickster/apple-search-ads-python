@@ -475,70 +475,29 @@ class TestAppleSearchAdsIntegration:
             pytest.skip("No campaigns available for testing search terms")
 
     @pytest.mark.slow
-    def test_impression_share_report_full_flow(self, client):
-        """Test the full impression share report flow: create, poll, download, parse."""
+    def test_impression_share_data(self, client):
+        """Query impression share synchronously (v1 replaced v5's queued custom
+        reports, so this no longer creates a report in the account)."""
         # Ensure we have an org set
         if not client.org_id:
             orgs = client.get_all_organizations()
             if orgs:
                 client.org_id = str(orgs[0]["orgId"])
 
-        # Use a unique name with timestamp to avoid conflicts
-        report_name = f"integration_test_{int(time.time())}"
+        end_date = datetime.now() - timedelta(days=3)
+        start_date = end_date - timedelta(days=6)
 
-        # Use a single day
-        start_date = datetime(2025, 11, 24)
-        end_date = datetime(2025, 11, 24)
-
-        print("\n=== Testing full impression share report flow ===")
-        print(f"Report name: {report_name}")
-        print(f"Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-
-        # Step 1: Create the report
-        report = client.create_impression_share_report(
-            name=report_name,
+        df = client.get_impression_share_data(
+            name="unused",
             start_date=start_date,
             end_date=end_date,
             granularity="DAILY",
         )
 
-        assert report is not None
-        assert "id" in report
-        assert "state" in report
-        print(f"Step 1 - Created report: ID={report['id']}, state={report['state']}")
+        if df.empty:
+            pytest.skip("No impression share data for this date range")
 
-        # Step 2: Poll for completion
-        report_id = report["id"]
-        max_attempts = 24  # 2 minutes max
-        completed = False
-
-        for i in range(max_attempts):
-            report_status = client.get_impression_share_report(report_id)
-            state = report_status.get("state")
-            print(f"Step 2 - Poll attempt {i+1}: state={state}")
-
-            if state == "COMPLETED":
-                completed = True
-                break
-            elif state not in ("QUEUED", "PENDING", "PROCESSING"):
-                pytest.fail(f"Unexpected report state: {state}")
-
-            time.sleep(5)
-
-        assert completed, f"Report did not complete within {max_attempts * 5} seconds"
-
-        # Step 3: Download and parse data
-        download_uri = report_status.get("downloadUri")
-        assert download_uri is not None, "No downloadUri in completed report"
-        print(f"Step 3 - Download URI received (length: {len(download_uri)})")
-
-        df = client._download_impression_share_report(download_uri)
-
-        # Step 4: Verify the data
-        print(f"Step 4 - DataFrame shape: {df.shape}")
-        print(f"Columns: {list(df.columns)}")
-
-        # Verify expected columns exist
+        # The v5 report's column names, which 4.0 keeps as aliases
         expected_columns = [
             "date",
             "appName",
@@ -550,24 +509,25 @@ class TestAppleSearchAdsIntegration:
             "rank",
             "searchPopularity",
         ]
-
         for col in expected_columns:
             assert col in df.columns, f"Missing expected column: {col}"
 
-        # Data may be empty if no impression share data exists, but structure should be correct
-        if not df.empty:
-            print("Sample data (first 3 rows):")
-            print(df.head(3).to_string())
+        # Impression share values are fractions (0-1), as in v5
+        assert df["lowImpressionShare"].min() >= 0
+        assert df["highImpressionShare"].max() <= 1
 
-            # Verify data types
-            assert df["lowImpressionShare"].dtype == "float64"
-            assert df["highImpressionShare"].dtype == "float64"
+    def test_include_basic_controls_automated_accounts(self, client):
+        """include_basic=False drops Basic (automated) accounts, which v5 never listed."""
+        all_orgs = client.get_all_organizations()
+        advanced_only = AppleSearchAdsClient(
+            client_id=os.environ.get("APPLE_SEARCH_ADS_CLIENT_ID"),
+            team_id=os.environ.get("APPLE_SEARCH_ADS_TEAM_ID"),
+            key_id=os.environ.get("APPLE_SEARCH_ADS_KEY_ID"),
+            private_key_path=os.environ.get("APPLE_SEARCH_ADS_PRIVATE_KEY_PATH"),
+            private_key_content=os.environ.get("APPLE_SEARCH_ADS_PRIVATE_KEY"),
+            include_basic=False,
+        ).get_all_organizations()
 
-            # Verify impression share values are in valid range (0-1)
-            assert df["lowImpressionShare"].min() >= 0
-            assert df["highImpressionShare"].max() <= 1
-
-            print(f"\n=== SUCCESS: Full flow completed with {len(df)} rows ===")
-        else:
-            print("DataFrame is empty - no impression share data for this date range")
-            print("=== SUCCESS: Full flow completed (no data for date range) ===")
+        basic = [o for o in all_orgs if "APPSTORE_APP_AUTOMATED" in o["productFeatures"]]
+        assert len(advanced_only) == len(all_orgs) - len(basic)
+        assert not any("APPSTORE_APP_AUTOMATED" in o["productFeatures"] for o in advanced_only)

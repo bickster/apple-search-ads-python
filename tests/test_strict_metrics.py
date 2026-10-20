@@ -1,5 +1,5 @@
 """
-Tests for strict metric parsing (v3.0.0).
+Tests for strict metric parsing (v3.0.0; v1 key names since 4.0.0).
 
 Field classes get distinct treatment:
 - Base facts (impressions, taps, installs, ..., localSpend): must be present, raise otherwise.
@@ -19,7 +19,7 @@ from apple_search_ads.exceptions import MissingMetricError
 
 
 def full_modern_row(**overrides):
-    """A complete non-legacy day row with every base fact present."""
+    """A complete v1 day row with every base fact present."""
     row = {
         "impressions": 10000,
         "taps": 500,
@@ -36,8 +36,8 @@ def full_modern_row(**overrides):
         "viewRedownloads": 3,
         "localSpend": {"amount": "1265.20", "currency": "USD"},
         "totalAvgCPI": {"amount": "2.00", "currency": "USD"},
-        "avgCPT": {"amount": "0.20", "currency": "USD"},
-        "avgCPM": {"amount": "10.00", "currency": "USD"},
+        "cpt": {"amount": "0.20", "currency": "USD"},
+        "cpm": {"amount": "10.00", "currency": "USD"},
         "ttr": 0.05,
         "totalInstallRate": 0.1,
         "tapInstallRate": 0.09,
@@ -46,8 +46,8 @@ def full_modern_row(**overrides):
     return row
 
 
-def full_legacy_row(**overrides):
-    """A complete legacy day row with every base fact present."""
+def full_v5_row(**overrides):
+    """A complete v5-era day row: v5 key names v1 no longer sends."""
     row = {
         "impressions": 10000,
         "taps": 500,
@@ -94,7 +94,7 @@ class TestStrictBaseFacts:
         del row["impressions"]
 
         with pytest.raises(MissingMetricError) as exc_info:
-            client._parse_metrics(row, is_legacy=False)
+            client._parse_metrics(row)
 
         assert exc_info.value.field == "impressions"
         assert "impressions" in str(exc_info.value)
@@ -105,7 +105,7 @@ class TestStrictBaseFacts:
         del row["taps"]
 
         with pytest.raises(MissingMetricError) as exc_info:
-            client._parse_metrics(row, is_legacy=False)
+            client._parse_metrics(row)
 
         assert "impressions" in exc_info.value.available_keys
 
@@ -116,7 +116,7 @@ class TestStrictBaseFacts:
         del row["localSpend"]
 
         with pytest.raises(MissingMetricError) as exc_info:
-            client._parse_metrics(row, is_legacy=False)
+            client._parse_metrics(row)
 
         assert exc_info.value.field == "localSpend"
 
@@ -128,39 +128,74 @@ class TestStrictBaseFacts:
         del row["latOnInstalls"]
         del row["latOffInstalls"]
 
-        metrics = client._parse_metrics(row, is_legacy=False)
+        metrics = client._parse_metrics(row)
 
         assert metrics["lat_on_installs"] is None
         assert metrics["lat_off_installs"] is None
 
     def test_present_lat_installs_keep_their_value(self):
         client = make_client()
-        metrics = client._parse_metrics(full_modern_row(), is_legacy=False)
+        metrics = client._parse_metrics(full_modern_row())
         assert metrics["lat_on_installs"] == 40
         assert metrics["lat_off_installs"] == 10
 
     def test_complete_row_parses_without_error(self):
         client = make_client()
-        metrics = client._parse_metrics(full_modern_row(), is_legacy=False)
+        metrics = client._parse_metrics(full_modern_row())
         assert metrics["impressions"] == 10000
         assert metrics["installs"] == 50
 
-    def test_legacy_row_with_modern_keys_raises(self):
-        """Regression for the is_legacy hazard: a non-legacy row (totalInstalls)
-        parsed with is_legacy=True must raise, not silently yield installs=0."""
+    def test_v5_row_keys_raise(self):
+        """A row in v5 key names (installs, not totalInstalls) must raise,
+        not silently yield installs=0."""
         client = make_client()
-        row = full_modern_row()  # carries totalInstalls, not installs
+        row = full_v5_row()
 
         with pytest.raises(MissingMetricError):
-            client._parse_metrics(row, is_legacy=True)
+            client._parse_metrics(row)
 
-    def test_modern_row_with_legacy_keys_raises(self):
-        """The inverse inference error must also raise."""
+    def test_v5_avg_money_keys_are_not_read(self):
+        """v1 renamed avgCPT/avgCPM to cpt/cpm; the old names must not be read."""
         client = make_client()
-        row = full_legacy_row()  # carries installs, not totalInstalls
+        row = full_modern_row()
+        del row["cpt"]
+        del row["cpm"]
+        row["avgCPT"] = {"amount": "0.20", "currency": "USD"}
 
+        metrics = client._parse_metrics(row)
+
+        assert metrics["avg_cpt"] is None
+        assert metrics["avg_cpm"] is None
+
+
+class TestIdleDayEntries:
+    """v1 pads idle days with date-only entries where v5 sent explicit zero rows."""
+
+    def test_date_only_entry_becomes_v5_zero_row(self):
+        client = make_client()
+        row = {"totalMetrics": full_modern_row(), "granularMetrics": []}
+
+        day = client._zero_day({"date": "2026-10-12"}, row)
+        metrics = client._parse_metrics(day)
+
+        assert day["date"] == "2026-10-12"
+        assert metrics["impressions"] == 0
+        assert metrics["installs"] == 0
+        assert metrics["spend"] == Decimal("0")
+        assert metrics["currency"] == "USD"
+        assert metrics["ttr"] is None
+        assert metrics["avg_cpa"] is None
+
+    def test_partial_entry_is_not_zero_filled(self):
+        """Only a date-only entry means idle; a partial one still raises."""
+        client = make_client()
+        partial = {"date": "2026-10-12", "impressions": 5}
+
+        day = client._zero_day(partial, {"totalMetrics": full_modern_row()})
+
+        assert day is partial
         with pytest.raises(MissingMetricError):
-            client._parse_metrics(row, is_legacy=False)
+            client._parse_metrics(day)
 
 
 class TestStrictRatios:
@@ -171,7 +206,7 @@ class TestStrictRatios:
         row = full_modern_row()
         del row["ttr"]
 
-        metrics = client._parse_metrics(row, is_legacy=False)
+        metrics = client._parse_metrics(row)
 
         assert metrics["ttr"] is None
 
@@ -180,14 +215,14 @@ class TestStrictRatios:
         row = full_modern_row()
         del row["totalInstallRate"]
 
-        metrics = client._parse_metrics(row, is_legacy=False)
+        metrics = client._parse_metrics(row)
 
         assert metrics["conversion_rate"] is None
 
     def test_zero_ratio_is_distinguishable_from_absent(self):
         """A genuine zero ratio stays 0; an absent one is None."""
         client = make_client()
-        metrics = client._parse_metrics(full_modern_row(ttr=0), is_legacy=False)
+        metrics = client._parse_metrics(full_modern_row(ttr=0))
         assert metrics["ttr"] == 0
         assert metrics["ttr"] is not None
 
@@ -197,14 +232,14 @@ class TestStrictMoney:
 
     def test_spend_is_exact_decimal(self):
         client = make_client()
-        metrics = client._parse_metrics(full_modern_row(), is_legacy=False)
+        metrics = client._parse_metrics(full_modern_row())
 
         assert type(metrics["spend"]) is Decimal
         assert metrics["spend"] == Decimal("1265.20")
 
     def test_avg_money_is_decimal(self):
         client = make_client()
-        metrics = client._parse_metrics(full_modern_row(), is_legacy=False)
+        metrics = client._parse_metrics(full_modern_row())
 
         assert type(metrics["avg_cpa"]) is Decimal
         assert metrics["avg_cpa"] == Decimal("2.00")
@@ -216,9 +251,9 @@ class TestStrictMoney:
         client = make_client()
         row = full_modern_row()
         del row["totalAvgCPI"]
-        del row["avgCPT"]
+        del row["cpt"]
 
-        metrics = client._parse_metrics(row, is_legacy=False)
+        metrics = client._parse_metrics(row)
 
         assert metrics["avg_cpa"] is None
         assert metrics["avg_cpt"] is None
@@ -226,7 +261,7 @@ class TestStrictMoney:
     def test_currency_comes_from_local_spend(self):
         client = make_client()
         row = full_modern_row(localSpend={"amount": "5.00", "currency": "EUR"})
-        metrics = client._parse_metrics(row, is_legacy=False)
+        metrics = client._parse_metrics(row)
         assert metrics["currency"] == "EUR"
 
 
@@ -240,7 +275,7 @@ class TestNonStrictCompatibility:
             "localSpend": {"amount": "10.50", "currency": "USD"},
         }
 
-        metrics = client._parse_metrics(sparse, is_legacy=False)
+        metrics = client._parse_metrics(sparse)
 
         assert metrics == {
             "impressions": 100,
@@ -266,14 +301,6 @@ class TestNonStrictCompatibility:
             "tap_install_rate": 0,
         }
         assert type(metrics["spend"]) is float
-
-    def test_sparse_legacy_row_zero_fills_like_v2(self):
-        client = make_client(strict=False)
-        metrics = client._parse_metrics({}, is_legacy=True)
-
-        assert metrics["installs"] == 0
-        assert metrics["spend"] == 0.0
-        assert metrics["ttr"] == 0
 
     def test_derived_metrics_work_with_decimal_spend(self):
         """The DataFrame convenience path must not choke on Decimal spend columns."""

@@ -1,7 +1,8 @@
 """
 Apple Search Ads Python Client
 
-A Python client library for Apple Search Ads API v5.
+A Python client library for the Apple Ads Platform API v1
+(successor to Campaign Management API v5).
 """
 
 from importlib import metadata

@@ -15,7 +15,7 @@ setup(
     version="3.2.0",
     author="Bickster LLC",
     author_email="support@bickster.com",
-    description="A Python client for Apple Search Ads API v5",
+    description="A Python client for the Apple Ads Platform API (successor to Apple Search Ads API v5)",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/bickster/apple-search-ads-python",

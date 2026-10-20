@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - Unreleased (retitle with the release date when tagging)
+
+**Migration note (breaking):** every call now goes to the Apple Ads Platform API v1, because
+Apple shuts down Campaign Management API v5 on 2027-01-26 and 3.x stops working then. Public
+method signatures and return shapes are unchanged, and existing v5 API keys keep working.
+Read [docs/v4-migration.md](docs/v4-migration.md), which also records the live 3.2.0-vs-4.0
+comparison this release was validated against.
+
+### Changed
+- **Totals now include Search Ads Basic spend.** v5 never listed Basic (automated) ad
+  accounts, so 3.x `fetch_all_orgs` totals silently excluded them. For the account this was
+  validated on, that was 2.0% of weekly spend. The new `include_basic` client parameter
+  (default `True`) controls this; `include_basic=False` reproduces 3.x numbers exactly.
+- `get_daily_spend_by_app` attributes spend from report metadata instead of a campaign
+  lookup. That makes fewer API calls, and it counts Basic accounts, whose campaigns v1
+  won't list.
+- `get_all_campaigns` skips Basic accounts, because v1 returns 403 to campaign queries on
+  them.
+- Returned objects are v1 dicts with the v5 field names added (`adamId`, `supplySources`,
+  `adChannelType`, `bidAmount`, `defaultBidAmount`, `isPreOrder`, …). Where v1 reuses a
+  v5 key with a new vocabulary (keyword `status`, ad group `pricingModel`, paused
+  campaigns' `displayStatus`), the v5 value is returned. A few v5 fields have no v1
+  equivalent and are absent (`budgetAmount`, `budgetOrders`, `targetingDimensions`, …);
+  `servingStateReasons` uses v1 reason codes.
+- `*_raw` report methods return v1 rows (`metadata`, `totalMetrics`, `granularMetrics`).
+- `get_campaign_report` now fills `adam_id` (3.x returned `None` on every row), and keyword
+  reports fill `avg_cpm`.
+- `get_all_organizations` makes one extra request per ad account to get currency, time
+  zone and payment model, which v1's ACL omits. The results are cached per client.
+- `get_campaigns`, `get_adgroups` and `get_keywords` page through all results; 3.x's
+  campaign and ad group calls read a single page of up to 1000.
+
+### Removed
+- `create_impression_share_report()` and `get_impression_share_report()` now raise
+  `NotImplementedError`: v1 has no queued custom reports. `get_impression_share_data()`
+  queries impression share directly instead; it keeps its signature (`name`,
+  `poll_interval` and `max_wait` are ignored) and accepts only `time_zone=None` or `"UTC"`.
+
+### Fixed
+- The README said the report time-zone default (`None`) was UTC. Both v5 and v1 actually
+  default to each account's own zone (ORTZ): a live comparison matched 35/35 daily rows
+  under ORTZ and 0/35 under UTC.
+
 ## [3.2.0] - 2026-08-04
 
 ### Added
