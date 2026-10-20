@@ -203,13 +203,21 @@ class AppleSearchAdsClient:
         return headers
 
     def _get_org_id(self) -> str:
-        """Get the ad account ID (v5 orgId) of the first account the user can access."""
+        """Get the ad account ID (v5 orgId) of the first account the user can access.
+
+        Basic (automated) accounts are passed over: v5 never listed them, and v1
+        refuses campaign queries on them, so defaulting to one would break every
+        org-scoped call. Falls back to the first account if all are Basic."""
         if self.org_id:
             return self.org_id
 
         acls = self._get_acls()
         if acls:
-            self.org_id = str(acls[0]["adAccount"]["id"])
+            account_ids = [str(acl["adAccount"]["id"]) for acl in acls]
+            self.org_id = next(
+                (a for a in account_ids if not self._is_basic(self._try_get_ad_account(a))),
+                account_ids[0],
+            )
             return self.org_id
 
         raise ValueError("No organization found for this account")
@@ -545,6 +553,17 @@ class AppleSearchAdsClient:
         zero.update(day_data)
         return zero
 
+    def _single_day(
+        self, start_date: Union[datetime, str], end_date: Union[datetime, str]
+    ) -> Optional[str]:
+        """The date of a one-day range, else None. Apple documents single-day
+        requests without granularity as totalMetrics-only (no per-day date);
+        DAILY requests get granularMetrics today (verified 2026-10-20), so this
+        only guards against that changing — it never guesses a multi-day date."""
+        start = self._parse_date_param(start_date).strftime("%Y-%m-%d")
+        end = self._parse_date_param(end_date).strftime("%Y-%m-%d")
+        return start if start == end else None
+
     def _report_rows_to_df(
         self,
         rows: List[Dict[str, Any]],
@@ -688,6 +707,19 @@ class AppleSearchAdsClient:
         self._ad_account_cache[ad_account_id] = details
         return details
 
+    def _try_get_ad_account(self, ad_account_id: str) -> Dict[str, Any]:
+        """_get_ad_account, but an API failure yields {} (not cached, so a
+        later call retries) instead of raising."""
+        try:
+            return self._get_ad_account(ad_account_id)
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching details for ad account {ad_account_id}: {e}")
+            return {}
+
+    @classmethod
+    def _is_basic(cls, details: Dict[str, Any]) -> bool:
+        return cls._BASIC_PRODUCT_FEATURE in (details.get("productFeatures") or [])
+
     def get_all_organizations(self) -> List[Dict[str, Any]]:
         """
         Get all organizations (v1 ad accounts) the user has access to.
@@ -702,9 +734,11 @@ class AppleSearchAdsClient:
         for acl in self._get_acls():
             ad_account = acl.get("adAccount") or {}
             account_id = ad_account.get("id")
-            details = self._get_ad_account(str(account_id))
+            # One unreadable account must not fail every fetch_all_orgs total;
+            # it is kept (its spend still counts) with its details unknown.
+            details = self._try_get_ad_account(str(account_id))
             features = details.get("productFeatures") or []
-            if not self.include_basic and self._BASIC_PRODUCT_FEATURE in features:
+            if not self.include_basic and self._is_basic(details):
                 continue
             parent_id = ad_account.get("orgId")
             organizations.append(
@@ -1016,7 +1050,9 @@ class AppleSearchAdsClient:
             DataFrame with campaign performance metrics.
         """
         rows = self.get_campaign_report_raw(start_date, end_date, granularity, time_zone)
-        return self._report_rows_to_df(rows, self._parse_campaign_row)
+        return self._report_rows_to_df(
+            rows, self._parse_campaign_row, self._single_day(start_date, end_date)
+        )
 
     def _parse_adgroup_row(
         self, row: Dict[str, Any], metadata: Dict[str, Any], campaign_id: str
@@ -1083,7 +1119,9 @@ class AppleSearchAdsClient:
             campaign_id, start_date, end_date, granularity, time_zone
         )
         return self._report_rows_to_df(
-            rows, lambda row, metadata: self._parse_adgroup_row(row, metadata, campaign_id)
+            rows,
+            lambda row, metadata: self._parse_adgroup_row(row, metadata, campaign_id),
+            self._single_day(start_date, end_date),
         )
 
     def _parse_keyword_row(
@@ -1158,7 +1196,9 @@ class AppleSearchAdsClient:
             campaign_id, start_date, end_date, granularity, time_zone
         )
         return self._report_rows_to_df(
-            rows, lambda row, metadata: self._parse_keyword_row(row, metadata, campaign_id)
+            rows,
+            lambda row, metadata: self._parse_keyword_row(row, metadata, campaign_id),
+            self._single_day(start_date, end_date),
         )
 
     def _parse_search_term_row(
@@ -1511,8 +1551,10 @@ class AppleSearchAdsClient:
         campaign_df["campaign_id"] = campaign_df["campaign_id"].astype(str)
         # v1 report rows carry the promoted app directly, so no campaign lookup
         # is needed to attribute spend (3.x needed get_campaigns_with_details).
+        # int() first: one row without an app turns the column float64, and
+        # str(1134998522.0) would break joins on app_id.
         campaign_df["app_id"] = campaign_df["adam_id"].map(
-            lambda adam_id: None if adam_id is None or pd.isna(adam_id) else str(adam_id)
+            lambda adam_id: None if adam_id is None or pd.isna(adam_id) else str(int(adam_id))
         )
 
         app_df = campaign_df[campaign_df["app_id"].notna()].copy()
@@ -1620,6 +1662,10 @@ class AppleSearchAdsClient:
             )
         if granularity not in self._IMPRESSION_SHARE_GRANULARITY:
             raise ValueError(f"granularity must be DAILY or WEEKLY, got: {granularity}")
+        if granularity == "WEEKLY" and self._parse_date_param(start_date).weekday() != 6:
+            raise ValueError(
+                "WEEKLY impression share uses Sunday-Saturday weeks; start on a Sunday"
+            )
 
         if not adam_ids:
             adam_ids = sorted(
@@ -1652,7 +1698,7 @@ class AppleSearchAdsClient:
             self._add_missing(
                 row,
                 {
-                    "adamId": row.get("promotedObjectId"),
+                    "adamId": self._to_int(row.get("promotedObjectId")),
                     "searchPopularity": row.get("searchPopularity1to5"),
                     "date": row.get("day", row.get("week")),
                 },
