@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [4.0.0] - Unreleased (retitle with the release date when tagging)
+## [4.0.0] - 2026-10-20
 
 **Migration note (breaking):** every call now goes to the Apple Ads Platform API v1, because
 Apple shuts down Campaign Management API v5 on 2027-01-26 and 3.x stops working then. Public
