@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [4.1.0] - Unreleased (retitle with the release date when tagging)
+## [4.1.0] - 2026-10-20
 
 Adds `group_by` to search term reports, plus fixes from an independent review of 4.0.0.
 Each fix is pinned by a test in `tests/test_review_fixes.py` that fails on 4.0.0.
